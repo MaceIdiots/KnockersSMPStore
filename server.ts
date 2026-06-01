@@ -10,32 +10,17 @@ async function createServer() {
   // API routes
   app.post("/api/notify-purchase", async (req, res) => {
     const { playerName, items, amount } = req.body;
-    const token = process.env.DISCORD_BOT_TOKEN;
-    const channelId = process.env.DISCORD_CHANNEL_ID;
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
 
-    if (!token || !channelId) {
-      console.error("Discord configuration missing");
+    if (!webhookUrl) {
+      console.error("Discord configuration missing: DISCORD_WEBHOOK_URL is not set.");
       return res.status(500).json({ status: "error", message: "Internal Server Error" });
     }
 
     try {
-      // Basic check for common misconfiguration (using bot ID as channel ID)
-      if (token.includes(".")) {
-        const botIdPart = token.split(".")[0];
-        try {
-          const decodedBotId = Buffer.from(botIdPart, 'base64').toString('utf8');
-          if (decodedBotId === channelId) {
-            console.warn("CRITICAL: DISCORD_CHANNEL_ID matches the Bot ID extracted from DISCORD_BOT_TOKEN. You likely used your Bot ID instead of a Channel ID.");
-          }
-        } catch (e) {
-          // ignore decode errors
-        }
-      }
-
-      const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
-          "Authorization": `Bot ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -45,8 +30,8 @@ async function createServer() {
               description: `**${playerName}** has just made a purchase in the Knockers SMP Store!`,
               color: 0xff0000, // SMP Red
               fields: [
-                { name: "Items", value: items.join(", "), inline: true },
-                { name: "Total Spent", value: `${amount} Coins`, inline: true },
+                { name: "Items", value: items && items.length ? items.join(", ") : "Unknown Item", inline: true },
+                { name: "Total Spent", value: `${amount || 0} Coins`, inline: true },
               ],
               timestamp: new Date().toISOString(),
               footer: {
@@ -58,14 +43,8 @@ async function createServer() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Discord API error details:", JSON.stringify(errorData));
-        if (errorData.code === 10003) {
-          return res.status(400).json({ 
-            status: "error", 
-            message: "The Discord Channel ID provided is unknown. Please ensure the bot is in the server and the ID is a valid Text Channel ID (not a Bot/User ID or Role ID)." 
-          });
-        }
+        const errorText = await response.text();
+        console.error("Discord Webhook error details:", errorText);
         return res.status(500).json({ status: "error", message: "Failed to send notification" });
       }
 
@@ -107,5 +86,3 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export default createServer();
-
-
