@@ -1,10 +1,9 @@
 {
-  "projectId": "starry-matrix-1mln4",
-  "appId": "1:55706807602:web:1e41884dbbf4759b387b2b",
-  "apiKey": "AIzaSyCy-RJz7xC8--8jrHbTvrmaenUkdJeCKoM",
-  "authDomain": "starry-matrix-1mln4.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-f21aa8a6-26bf-4a6a-805f-1b764e2102c7",
-  "storageBucket": "starry-matrix-1mln4.firebasestorage.app",
-  "messagingSenderId": "55706807602",
-  "measurementId": ""
+  "apiKey": "AIzaSyBqZpHLwA6IaD-OmUsVPFrgefgXRKcso_E",
+  "authDomain": "knockers-smp-store.firebaseapp.com",
+  "projectId": "knockers-smp-store",
+  "storageBucket": "knockers-smp-store.firebasestorage.app",
+  "messagingSenderId": "114093277335",
+  "appId": "1:114093277335:web:da91e63c27a697f33fa9d2",
+  "measurementId": "G-CGEZPMD4PC"
 }
