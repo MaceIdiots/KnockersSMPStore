@@ -5,7 +5,7 @@
 
 import { useState, useEffect, FormEvent, useRef, ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingCart, Check, X, Coins, Pickaxe, Hammer, Gem, LayoutGrid, Clock, Users, Send, UserPlus, ShieldCheck, User, Save, Trash2, ExternalLink, Camera, Search, Plus, Phone, Bell, MoreVertical, MessageSquarePlus, Loader2, Gift, Flame } from 'lucide-react';
+import { ShoppingCart, Check, X, Coins, Pickaxe, Hammer, Gem, LayoutGrid, Clock, Users, Send, UserPlus, ShieldCheck, User, Save, Trash2, ExternalLink, Camera, Search, Plus, Phone, Bell, MoreVertical, MessageSquarePlus, Loader2, Gift, Flame, Copy } from 'lucide-react';
 import { KITS, ROLES, Kit, Role, UserProfile, FriendRequest, ChatThread, ChatMessage } from '../types';
 
 interface ViewProps {
@@ -1243,15 +1243,33 @@ export function ProfileView({
 export function LoginView({ onLogin, onLoginAsGuest }: Pick<ViewProps, 'onLogin'> & { onLoginAsGuest?: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedText, setCopiedText] = useState<string | null>(null);
+  const [showDomainGuide, setShowDomainGuide] = useState(false);
+
+  const handleCopyText = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedText(text);
+    setTimeout(() => {
+      setCopiedText(null);
+    }, 2000);
+  };
 
   const handleLogin = async () => {
     if (loading) return;
     setLoading(true);
     setError(null);
+    setShowDomainGuide(false);
     try {
       if (onLogin) await onLogin();
     } catch (err: any) {
-      console.error('Full Login Error Object:', err);
+      if (err && (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain')))) {
+        console.warn('Firebase Login: unauthorized-domain handled cleanly. Please whitelists the current domain in Firebase Console.');
+      } else if (err && (err.code === 'auth/cancelled-popup-request' || err.code === 'auth/popup-closed-by-user')) {
+        console.warn('Firebase Login: User popup closed or cancelled.');
+      } else {
+        console.error('Full Login Error Object:', err);
+      }
+
       if (err.code === 'auth/cancelled-popup-request') {
         setError('Login attempt was cancelled. If popups are blocked, try allowing them or using the Direct Redirect method.');
       } else if (err.code === 'auth/popup-closed-by-user') {
@@ -1260,8 +1278,9 @@ export function LoginView({ onLogin, onLoginAsGuest }: Pick<ViewProps, 'onLogin'
         setError('Popup was blocked by your browser. Please allow popups or use the Direct Redirect button below.');
       } else if (err.code === 'auth/operation-not-allowed') {
         setError('Google Login is not enabled in Firebase Console. Please enable it under Auth > Sign-in Method.');
-      } else if (err.code === 'auth/unauthorized-domain') {
-        setError('This domain is not authorized in Firebase. Add this URL to "Authorized Domains" in Firebase Console.');
+      } else if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
+        setShowDomainGuide(true);
+        setError('unauthorized-domain');
       } else {
         setError(`Login failed: ${err.message || 'Unknown error'}`);
       }
@@ -1272,12 +1291,19 @@ export function LoginView({ onLogin, onLoginAsGuest }: Pick<ViewProps, 'onLogin'
 
   const handleRedirectLogin = async () => {
     setLoading(true);
+    setError(null);
+    setShowDomainGuide(false);
     try {
       const { auth, googleProvider } = await import('../lib/firebase');
       const { signInWithRedirect } = await import('firebase/auth');
       await signInWithRedirect(auth, googleProvider);
     } catch (err: any) {
-      setError(`Redirect failed: ${err.message}`);
+      if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
+        setShowDomainGuide(true);
+        setError('unauthorized-domain');
+      } else {
+        setError(`Redirect failed: ${err.message}`);
+      }
       setLoading(false);
     }
   };
@@ -1349,7 +1375,79 @@ export function LoginView({ onLogin, onLoginAsGuest }: Pick<ViewProps, 'onLogin'
             </div>
           </div>
 
-          {error && (
+          {showDomainGuide && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-5 bg-smp-red/10 border-2 border-smp-red/30 text-left space-y-4 pixel-corners text-xs"
+            >
+              <div className="flex items-center gap-2 text-smp-red font-black uppercase tracking-wider">
+                <Bell size={16} className="animate-pulse shrink-0" />
+                <span>FIREBASE DOMAIN WHITELIST REQUIRED</span>
+              </div>
+              
+              <p className="text-gray-400 leading-relaxed uppercase text-[9px]">
+                Firebase Google Sign-In is secure and only permits pre-authorized domain names. Please add the following domains to your Firebase Project:
+              </p>
+
+              <div className="space-y-2">
+                {[
+                  window.location.hostname,
+                  'ais-dev-43mnzasm346duflv7uff6u-73132071389.europe-west2.run.app',
+                  'ais-pre-43mnzasm346duflv7uff6u-73132071389.europe-west2.run.app',
+                  'localhost'
+                ].filter((v, i, self) => self.indexOf(v) === i).map((domain) => (
+                  <div key={domain} className="flex items-center justify-between bg-black/40 p-2 border border-white/5 pixel-corners font-mono text-[9px]">
+                    <span className="text-gray-300 break-all select-all mr-1">{domain}</span>
+                    <button 
+                      type="button"
+                      onClick={() => handleCopyText(domain)}
+                      className="text-smp-red hover:text-white transition-colors flex items-center gap-1 uppercase font-bold shrink-0"
+                    >
+                      {copiedText === domain ? (
+                        <span className="text-green-500 text-[9px]">COPIED!</span>
+                      ) : (
+                        <>
+                          <Copy size={12} />
+                          <span className="text-[9px]">COPY</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-1.5 text-gray-400 text-[9px] font-bold uppercase tracking-wide leading-relaxed">
+                <p className="text-white italic">🚀 HOW TO WHITELIST IN 30 SECONDS:</p>
+                <p>1. Go to your <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-smp-red underline hover:text-white">Firebase Console</a></p>
+                <p>2. Select <strong className="text-gray-300">Authentication</strong> &gt; <strong className="text-gray-300">Settings</strong> tab</p>
+                <p>3. Go to <strong className="text-gray-300">Authorized Domains</strong> list and click <strong className="text-white">"Add Domain"</strong></p>
+                <p>4. Paste each domain copied above and click Save</p>
+              </div>
+
+              <div className="pt-2 border-t border-white/5 flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    setShowDomainGuide(false);
+                    setError(null);
+                  }}
+                  className="w-1/2 py-2 bg-white/5 hover:bg-white/10 text-white font-extrabold uppercase pixel-corners text-[10px] text-center"
+                >
+                  DISMISS
+                </button>
+                <button 
+                  type="button" 
+                  onClick={onLoginAsGuest}
+                  className="w-1/2 py-2 bg-green-700/80 hover:bg-green-700 text-white font-extrabold uppercase pixel-corners text-[10px] text-center"
+                >
+                  GUEST BYPASS
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {error && error !== 'unauthorized-domain' && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}

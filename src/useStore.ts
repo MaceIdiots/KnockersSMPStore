@@ -30,7 +30,7 @@ const DEFAULT_STATE: UserState = {
     pfp: 'https://mc-heads.net/avatar/Steve',
     bio: 'Survivalist in Knockers SMP. Grinding for Netherite.',
   },
-  coins: 0,
+  coins: 100000,
   ownedKits: [],
   ownedRoles: [],
   friends: [],
@@ -141,7 +141,7 @@ export function useStore() {
         // Create initial profile if it doesn't exist
         const initialProfile = {
           profile: state.profile,
-          coins: 0, // Force 0 on creation as requested
+          coins: 100000, // Starting coins of 100k
           ownedKits: [],
           ownedRoles: [],
           lastWorked: null,

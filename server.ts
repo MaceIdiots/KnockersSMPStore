@@ -14,8 +14,11 @@ async function createServer() {
     const channelId = process.env.DISCORD_CHANNEL_ID;
 
     if (!token || !channelId) {
-      console.error("Discord configuration missing");
-      return res.status(500).json({ status: "error", message: "Internal Server Error" });
+      console.warn("Discord configuration (DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID) is missing in environment variables. Purchase transaction succeeded, Discord notify skipped.");
+      return res.json({ 
+        status: "warning", 
+        message: "Discord notification skipped. Please define DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID in Settings." 
+      });
     }
 
     try {
@@ -58,21 +61,29 @@ async function createServer() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Discord API error details:", JSON.stringify(errorData));
-        if (errorData.code === 10003) {
-          return res.status(400).json({ 
-            status: "error", 
-            message: "The Discord Channel ID provided is unknown. Please ensure the bot is in the server and the ID is a valid Text Channel ID (not a Bot/User ID or Role ID)." 
-          });
+        let errorData: any = {};
+        try {
+          errorData = await response.json();
+        } catch (e) {
+          errorData = { message: "Could not parse response" };
         }
-        return res.status(500).json({ status: "error", message: "Failed to send notification" });
+        console.error("Discord API error details:", JSON.stringify(errorData));
+        
+        // We log the error on the server but return 200 JSON with status warning/error info
+        // so that the local storefront purchase flow is still fully completed.
+        return res.json({ 
+          status: "warning", 
+          message: `Discord endpoint returned non-OK status (${response.status}). Purchase succeeded locally. Error: ${errorData.message || 'Unauthorized or bad channel request.'}` 
+        });
       }
 
       res.json({ status: "ok" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Notification error:", error);
-      res.status(500).json({ status: "error", message: "Internal Server Error" });
+      res.json({ 
+        status: "warning", 
+        message: `Network error of purchase notification: ${error.message || error}` 
+      });
     }
   });
 
