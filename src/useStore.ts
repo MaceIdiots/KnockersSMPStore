@@ -51,6 +51,16 @@ export function useStore() {
 
   // Handle Auth State
   useEffect(() => {
+    const initAuth = async () => {
+      // Check if we just returned from a redirect
+      const { checkRedirectLogin } = await import('./lib/firebase');
+      const redirectUser = await checkRedirectLogin();
+      if (redirectUser) {
+        setCurrentUser(redirectUser);
+      }
+    };
+    initAuth();
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (!user) {
@@ -63,10 +73,18 @@ export function useStore() {
             if (typeof parsed.coins === 'number' && parsed.coins < 100000) {
               parsed.coins = 100000;
             }
-            setState(prev => ({ ...prev, ...parsed }));
+            // If they are at 5000, force it to 100000
+            if (parsed.coins === 5000) {
+              console.log("Found 5000 coins in local storage, overwriting with 100000 as requested.");
+              parsed.coins = 100000;
+            }
+            setState(prev => ({ ...prev, ...parsed, coins: Math.max(parsed.coins, 100000) }));
           } catch (e) {
             console.error('Local state load failed', e);
           }
+        } else {
+          // If no saved state, start with default
+          setState(DEFAULT_STATE);
         }
         setLoading(false);
       }
@@ -89,6 +107,7 @@ export function useStore() {
         
         // Trial balance check: ensure user has at least 100k for demo purposes as requested
         if (firestoreCoins < 100000) {
+          console.log(`FORCING BALANCE: User only had ${firestoreCoins}. Auto-top up to 100,000 for demo.`);
           updateDoc(userDoc, { coins: 100000 }).catch(console.error);
         }
 

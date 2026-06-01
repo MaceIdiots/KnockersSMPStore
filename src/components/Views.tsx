@@ -868,15 +868,31 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
     } catch (err: any) {
       console.error('Full Login Error Object:', err);
       if (err.code === 'auth/cancelled-popup-request') {
-        setError('Login attempt was cancelled. Please try again.');
+        setError('Login attempt was cancelled. If popups are blocked, try allowing them or using the Alternative Connect method below.');
       } else if (err.code === 'auth/popup-closed-by-user') {
         setError('Login window was closed. Please try again.');
       } else if (err.message && err.message.includes('auth/popup-blocked')) {
-        setError('Popup was blocked by your browser. Please allow popups for this site.');
+        setError('Popup was blocked by your browser. Please allow popups for this site or use the Alternative Connect below.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('Google Login is not enabled in Firebase Console. Please enable it under Auth > Sign-in Method.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('This domain is not authorized in Firebase. Add your Vercel URL to "Authorized Domains" in Firebase Console.');
       } else {
         setError(`Login failed: ${err.message || 'Unknown error'}`);
       }
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRedirectLogin = async () => {
+    setLoading(true);
+    try {
+      const { auth, googleProvider } = await import('../lib/firebase');
+      const { signInWithRedirect } = await import('firebase/auth');
+      await signInWithRedirect(auth, googleProvider);
+    } catch (err: any) {
+      setError(`Redirect failed: ${err.message}`);
       setLoading(false);
     }
   };
@@ -902,32 +918,55 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
           </p>
         </div>
 
-        <div className="space-y-4 relative z-10">
+        <div className="space-y-6 relative z-10">
+          <div className="space-y-3">
+            <button 
+              type="button"
+              onClick={handleLogin}
+              disabled={loading}
+              className={`w-full py-5 bg-white text-black font-bold text-xl pixel-corners transition-all flex items-center justify-center gap-3 shadow-[0_8px_0_0_#d1d5db] active:shadow-none active:translate-y-2 hover:bg-gray-100 group ${loading ? 'opacity-50 cursor-not-allowed shadow-none' : ''}`}
+            >
+              {loading ? (
+                <Loader2 className="animate-spin" size={24} />
+              ) : (
+                <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-[10px] text-white">G</div>
+              )}
+              {loading ? 'CONNECTING...' : 'CONTINUE WITH GOOGLE'}
+            </button>
+            
+            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest leading-relaxed">
+              Standard secure popup connection
+            </p>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+            <div className="relative flex justify-center text-[10px] uppercase font-bold"><span className="bg-smp-card px-2 text-gray-700">Alternative Connect</span></div>
+          </div>
+
           <button 
             type="button"
-            onClick={handleLogin}
+            onClick={handleRedirectLogin}
             disabled={loading}
-            className={`w-full py-5 bg-white text-black font-bold text-xl pixel-corners transition-all flex items-center justify-center gap-3 shadow-[0_8px_0_0_#d1d5db] active:shadow-none active:translate-y-2 hover:bg-gray-100 group ${loading ? 'opacity-50 cursor-not-allowed shadow-none' : ''}`}
+            className="w-full py-3 bg-transparent border border-white/10 text-gray-400 hover:text-white hover:border-white/30 pixel-corners transition-all text-xs font-bold uppercase tracking-widest"
           >
-            {loading ? (
-              <Loader2 className="animate-spin" size={24} />
-            ) : (
-              <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-[10px] text-white">G</div>
-            )}
-            {loading ? 'CONNECTING...' : 'CONTINUE WITH GOOGLE'}
+            {loading ? 'REDIRECTING...' : 'Use Direct Page Login'}
           </button>
           
           {error && (
-            <motion.p 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-smp-red text-[10px] font-bold uppercase italic tracking-wider animate-pulse"
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="p-4 bg-red-500/10 border border-red-500/30 text-smp-red text-[10px] font-bold uppercase italic tracking-wider leading-relaxed pixel-corners"
             >
-              {error}
-            </motion.p>
+              <div className="flex items-start gap-2 text-left">
+                <Bell size={14} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            </motion.div>
           )}
 
-          <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest leading-relaxed">
+          <p className="text-[10px] text-gray-600 uppercase font-bold tracking-widest leading-relaxed">
             By logging in, you agree to our server rules and synchronization terms.
           </p>
         </div>

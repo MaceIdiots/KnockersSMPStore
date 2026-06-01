@@ -3,10 +3,8 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import fs from "fs";
 
-async function startServer() {
+async function createServer() {
   const app = express();
-  const PORT = 3000;
-
   app.use(express.json());
 
   // API routes
@@ -95,13 +93,19 @@ async function startServer() {
     }
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-
   return app;
 }
 
-export default startServer();
+// For local development
+if (process.env.NODE_ENV !== "production") {
+  createServer().then(app => {
+    const PORT = 3000;
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  });
+}
+
+export default createServer();
 
 

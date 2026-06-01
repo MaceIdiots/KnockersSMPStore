@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -57,17 +57,37 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 export async function loginWithGoogle() {
   try {
-    // Force a specific domain if we're in an iframe environment that might confuse Firebase
-    // But usually Firebase SDK handles this. 
+    // Attempt popup first
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
   } catch (error: any) {
-    if (error.code === 'auth/popup-blocked') {
-      console.error('Popup blocked');
-    }
     console.error('Login error detail:', error);
-    throw error;
+    
+    // If popup is blocked or we're in a environment that prefers redirect
+    if (error.code === 'auth/popup-blocked' || error.code === 'auth/cancelled-popup-request') {
+      console.log('Popup blocked or cancelled, attempting redirect...');
+      try {
+        await signInWithRedirect(auth, googleProvider);
+      } catch (redirectError) {
+        console.error('Redirect login error:', redirectError);
+        throw redirectError;
+      }
+    } else {
+      throw error;
+    }
   }
+}
+
+export async function checkRedirectLogin() {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      return result.user;
+    }
+  } catch (error) {
+    console.error('Redirect result error:', error);
+  }
+  return null;
 }
 
 export async function testConnection() {
