@@ -5,7 +5,7 @@
 
 import { useState, useEffect, FormEvent, useRef, ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingCart, Check, X, Coins, Pickaxe, Hammer, Gem, LayoutGrid, Clock, Users, Send, UserPlus, ShieldCheck, User, Save, Trash2, ExternalLink, Camera, Search, Plus, Phone, Bell, MoreVertical, MessageSquarePlus, Loader2, Gift } from 'lucide-react';
+import { ShoppingCart, Check, X, Coins, Pickaxe, Hammer, Gem, LayoutGrid, Clock, Users, Send, UserPlus, ShieldCheck, User, Save, Trash2, ExternalLink, Camera, Search, Plus, Phone, Bell, MoreVertical, MessageSquarePlus, Loader2, Gift, Flame } from 'lucide-react';
 import { KITS, ROLES, Kit, Role, UserProfile, FriendRequest, ChatThread, ChatMessage } from '../types';
 
 interface ViewProps {
@@ -1241,6 +1241,47 @@ export function ProfileView({
 }
 
 export function LoginView({ onLogin, onLoginAsGuest }: Pick<ViewProps, 'onLogin'> & { onLoginAsGuest?: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLogin = async () => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      if (onLogin) await onLogin();
+    } catch (err: any) {
+      console.error('Full Login Error Object:', err);
+      if (err.code === 'auth/cancelled-popup-request') {
+        setError('Login attempt was cancelled. If popups are blocked, try allowing them or using the Direct Redirect method.');
+      } else if (err.code === 'auth/popup-closed-by-user') {
+        setError('Login window was closed. Please try again.');
+      } else if (err.message && err.message.includes('auth/popup-blocked')) {
+        setError('Popup was blocked by your browser. Please allow popups or use the Direct Redirect button below.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('Google Login is not enabled in Firebase Console. Please enable it under Auth > Sign-in Method.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('This domain is not authorized in Firebase. Add this URL to "Authorized Domains" in Firebase Console.');
+      } else {
+        setError(`Login failed: ${err.message || 'Unknown error'}`);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRedirectLogin = async () => {
+    setLoading(true);
+    try {
+      const { auth, googleProvider } = await import('../lib/firebase');
+      const { signInWithRedirect } = await import('firebase/auth');
+      await signInWithRedirect(auth, googleProvider);
+    } catch (err: any) {
+      setError(`Redirect failed: ${err.message}`);
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center minecraft-bg-pattern p-4">
       <motion.div 
@@ -1258,22 +1299,26 @@ export function LoginView({ onLogin, onLoginAsGuest }: Pick<ViewProps, 'onLogin'
             KNOCKERS <br/> <span className="text-smp-red">SMP</span>
           </h1>
           <p className="text-gray-400 text-sm leading-relaxed">
-            Instant Sandbox & Economy Dashboard. Access your coins and team roster.
+            Instant Sandbox & Economy Dashboard. Access your coins and team roster in real-time.
           </p>
         </div>
 
         <div className="space-y-6 relative z-10">
-          {/* Release Preview Notice */}
-          <div className="p-5 bg-smp-red/10 border-2 border-smp-red/30 pixel-corners text-left space-y-2">
-            <h4 className="text-smp-red font-black text-xs uppercase italic tracking-wider flex items-center gap-1.5">
-              <span className="w-2 h-2 bg-smp-red rounded-full animate-ping" /> FIREBASE SYNC COMING SOON!
-            </h4>
-            <p className="text-[11px] text-gray-400 leading-relaxed uppercase">
-              Google Sign-In and cloud-based account synchronization are currently undergoing backend maintenance and will be released in the next patch update soon.
-            </p>
-          </div>
-
           <div className="space-y-4">
+            <button 
+              type="button"
+              onClick={handleLogin}
+              disabled={loading}
+              className={`w-full py-5 bg-white text-black font-bold text-xl pixel-corners transition-all flex items-center justify-center gap-3 shadow-[0_8px_0_0_#d1d5db] active:shadow-none active:translate-y-2 hover:bg-gray-100 group ${loading ? 'opacity-50 cursor-not-allowed shadow-none' : ''}`}
+            >
+              {loading ? (
+                <Loader2 className="animate-spin" size={24} />
+              ) : (
+                <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-[10px] text-white font-black">G</div>
+              )}
+              {loading ? 'CONNECTING...' : 'CONNECT WITH GOOGLE'}
+            </button>
+
             {onLoginAsGuest && (
               <button 
                 type="button"
@@ -1285,10 +1330,37 @@ export function LoginView({ onLogin, onLoginAsGuest }: Pick<ViewProps, 'onLogin'
               </button>
             )}
             
-            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
-              Use Guest connection to access all features & save your coin progress locally.
-            </p>
+            <div className="flex flex-col items-center gap-2 pt-2">
+              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest leading-relaxed">
+                Problems signing in?
+              </p>
+              <div className="flex justify-center items-center gap-4 text-[10px]">
+                <button 
+                  type="button"
+                  onClick={handleRedirectLogin}
+                  disabled={loading}
+                  className="text-smp-red hover:text-white font-bold uppercase underline underline-offset-4 decoration-smp-red/30 transition-colors"
+                >
+                  Try Direct Redirect
+                </button>
+                <span className="text-gray-700">|</span>
+                <span className="text-gray-500 font-medium">Use Guest Mode if browser redirects are blocked</span>
+              </div>
+            </div>
           </div>
+
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="p-4 bg-red-500/10 border border-red-500/30 text-smp-red text-[10px] font-bold uppercase italic tracking-wider leading-relaxed pixel-corners"
+            >
+              <div className="flex items-start gap-2 text-left">
+                <Bell size={14} className="shrink-0 mt-0.5" />
+                <span>{error}</span>
+              </div>
+            </motion.div>
+          )}
 
           <p className="text-[10px] text-gray-600 uppercase font-bold tracking-widest leading-relaxed">
             By joining, you agree to our server rules and synchronization terms.
@@ -1297,9 +1369,10 @@ export function LoginView({ onLogin, onLoginAsGuest }: Pick<ViewProps, 'onLogin'
 
         <div className="pt-8 border-t border-white/5 opacity-50 relative z-10">
            <div className="flex items-center justify-center gap-6">
-             <Pickaxe size={24} className="text-gray-600" />
-             <ShieldCheck size={24} className="text-gray-600" />
-             <Coins size={24} className="text-gray-600" />
+             <Pickaxe size={24} className="text-gray-600 hover:text-white transition-colors cursor-help" />
+             <Flame size={24} className="text-gray-600 hover:text-orange-500 transition-colors cursor-help animate-pulse" title="Firebase Dynamic Database" />
+             <ShieldCheck size={24} className="text-gray-600 hover:text-white transition-colors cursor-help" />
+             <Coins size={24} className="text-gray-600 hover:text-yellow-500 transition-colors cursor-help" />
            </div>
         </div>
       </motion.div>
