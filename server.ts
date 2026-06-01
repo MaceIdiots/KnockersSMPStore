@@ -226,9 +226,21 @@ async function createServer() {
     }
 
     try {
-      const protocol = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
-      const host = req.headers.host || req.get("host") || "localhost:3000";
-      const appUrl = `${protocol}://${host}`;
+      let appUrl = req.body.origin;
+      if (!appUrl) {
+        const referer = req.headers.referer;
+        if (referer) {
+          try {
+            const refUrl = new URL(referer);
+            appUrl = refUrl.origin;
+          } catch (e) {}
+        }
+      }
+      if (!appUrl) {
+        const protocol = req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+        const host = req.headers["x-forwarded-host"] || req.headers.host || req.get("host") || "localhost:3000";
+        appUrl = `${protocol}://${host}`;
+      }
       
       const kitsCsv = Array.isArray(req.body.ownedKits) ? req.body.ownedKits.join(",") : "";
       const rolesCsv = Array.isArray(req.body.ownedRoles) ? req.body.ownedRoles.join(",") : "";

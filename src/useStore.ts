@@ -282,7 +282,8 @@ export function useStore() {
 
     const checkAndApplyBackup = async () => {
       try {
-        const res = await fetch(`/api/check-backup?uid=${encodeURIComponent(currentUser.uid)}`);
+        const res = await fetch(`${window.location.origin}/api/check-backup?uid=${encodeURIComponent(currentUser.uid)}`);
+        if (!res.ok) return;
         const data = await res.json();
         if (data.status === 'ok' && data.found && data.backup) {
           console.log("RESTORE-SAVE: Found progress backup from Discord ✅", data.backup);
@@ -312,14 +313,15 @@ export function useStore() {
           });
 
           // Clear backup so it isn't repeatedly applied
-          await fetch(`/api/clear-backup?uid=${encodeURIComponent(currentUser.uid)}`, {
+          await fetch(`${window.location.origin}/api/clear-backup?uid=${encodeURIComponent(currentUser.uid)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ uid: currentUser.uid })
-          });
+          }).catch(() => {});
         }
       } catch (e) {
-        console.error("RESTORE-SAVE: Error checking backup:", e);
+        // Suppress noisy console error of transient 'Failed to fetch' during restarts/loads
+        console.warn("RESTORE-SAVE: Progress check server was unavailable or restarting, will retrying shortly.");
       }
     };
 
@@ -340,6 +342,7 @@ export function useStore() {
       const user = userRef.current;
       
       const payload = {
+        origin: window.location.origin,
         playerName: currentState.profile.name,
         coins: currentState.coins,
         ownedKits: currentState.ownedKits,
@@ -348,14 +351,17 @@ export function useStore() {
       };
 
       // Use keepalive: true to ensure the browser successfully dispatches this off-tab request
-      fetch('/api/save-progress-webhook', {
+      fetch(`${window.location.origin}/api/save-progress-webhook`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload),
         keepalive: true
-      }).catch(err => console.error('Failed to trigger unload save webhook:', err));
+      }).catch(err => {
+        // Silently handle the cancelled promise rejection during unloading 
+        // while keepalive makes sure the payload is shipped to the server
+      });
     };
 
     const handleVisibilityChange = () => {
