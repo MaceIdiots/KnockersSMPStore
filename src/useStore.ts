@@ -30,7 +30,7 @@ const DEFAULT_STATE: UserState = {
     pfp: 'https://mc-heads.net/avatar/Steve',
     bio: 'Survivalist in Knockers SMP. Grinding for Netherite.',
   },
-  coins: 100000,
+  coins: 0,
   ownedKits: [],
   ownedRoles: [],
   friends: [],
@@ -122,10 +122,10 @@ export function useStore() {
         let needsUpdate = false;
         const updates: any = {};
 
-        // If old version detected, upgrade coins to 100,000 instead of 0
+        // If old version detected, upgrade coins to 0
         if (currentResetVersion < 3 && currentUser) {
-          console.log("OLD VERSION DETECTED: Setting migration/starting coins to 100,000.");
-          updates.coins = 100000;
+          console.log("OLD VERSION DETECTED: Setting migration/starting coins to 0.");
+          updates.coins = 0;
           updates.resetVersion = 3;
           needsUpdate = true;
         }
@@ -164,7 +164,7 @@ export function useStore() {
         // Create initial profile if it doesn't exist, retaining any stats accumulated as guest
         const initialProfile = {
           profile: state.profile,
-          coins: state.coins || 100000,
+          coins: state.coins || 0,
           ownedKits: state.ownedKits || [],
           ownedRoles: state.ownedRoles || [],
           lastWorked: state.lastWorked || null,
