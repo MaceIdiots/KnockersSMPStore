@@ -14,13 +14,13 @@ async function createServer() {
     const itemName = req.body.itemName || (Array.isArray(req.body.items) ? req.body.items.join(", ") : req.body.items) || "Unknown Item";
     const price = req.body.price !== undefined ? req.body.price : (req.body.amount !== undefined ? req.body.amount : "0");
 
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL || process.env["DISCORD WEBHOOK URL"] || process.env.DISCORD_WEBHOOK || process.env.discord_webhook;
 
     if (!webhookUrl) {
-      console.warn("DISCORD_WEBHOOK_URL environment variable is missing in settings. Purchase webhook skipped.");
+      console.warn("DISCORD_WEBHOOK_URL / DISCORD WEBHOOK URL environment variable is missing in settings. Purchase webhook skipped.");
       return res.status(400).json({ 
         status: "error", 
-        message: "Discord notification skipped. DISCORD_WEBHOOK_URL is not defined in settings." 
+        message: "Discord notification skipped. DISCORD_WEBHOOK_URL / DISCORD WEBHOOK URL is not defined in settings." 
       });
     }
 
@@ -88,13 +88,13 @@ async function createServer() {
     const itemName = req.body.itemName || req.body.item_name || req.body["Item Name"] || req.body.item || (Array.isArray(req.body.items) ? req.body.items.join(", ") : req.body.items) || "Unknown Item";
     const price = req.body.price || req.body.Price || req.body.amount || req.body.total || "0";
 
-    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL || process.env["DISCORD WEBHOOK URL"] || process.env.DISCORD_WEBHOOK || process.env.discord_webhook;
 
     if (!webhookUrl) {
-      console.error("DISCORD_WEBHOOK_URL environment variable is missing.");
+      console.error("DISCORD_WEBHOOK_URL / DISCORD WEBHOOK URL environment variable is missing.");
       return res.status(500).json({ 
         status: "error", 
-        message: "DISCORD_WEBHOOK_URL environment variable is not defined in the applet's settings." 
+        message: "DISCORD_WEBHOOK_URL / DISCORD WEBHOOK URL environment variable is not defined in the applet's settings." 
       });
     }
 
@@ -173,15 +173,13 @@ async function createServer() {
   return app;
 }
 
-// For local development
-if (process.env.NODE_ENV !== "production") {
-  createServer().then(app => {
-    const PORT = 3000;
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
+// Start the server for all environments (dev and production)
+createServer().then(app => {
+  const PORT = 3000;
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
-}
+});
 
 export default createServer();
 

@@ -82,6 +82,16 @@ export function useStore() {
             email: 'guest@knockers.smp',
             displayName: 'Guest Player'
           } as any);
+          // Load guest data from local storage
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              setState(prev => ({ ...prev, ...parsed }));
+            } catch (e) {
+              console.error('Local state load failed', e);
+            }
+          }
         } else {
           setCurrentUser(null);
           // Load from local storage if not logged in
@@ -97,8 +107,8 @@ export function useStore() {
             setState(DEFAULT_STATE);
           }
         }
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsubscribe;
   }, []);
@@ -160,6 +170,7 @@ export function useStore() {
           friends: data.friends || prev.friends,
           sentRequests: data.sentRequests || prev.sentRequests,
         }));
+        setLoading(false);
       } else {
         // Create initial profile if it doesn't exist, retaining any stats accumulated as guest
         const initialProfile = {
@@ -181,9 +192,13 @@ export function useStore() {
           await setDoc(userDoc, initialProfile);
         };
         
-        registerUsername().catch(e => handleFirestoreError(e, OperationType.CREATE, `users/${currentUser.uid}`));
+        registerUsername()
+          .then(() => setLoading(false))
+          .catch(e => {
+            handleFirestoreError(e, OperationType.CREATE, `users/${currentUser.uid}`);
+            setLoading(false);
+          });
       }
-      setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
       setLoading(false);
@@ -245,10 +260,10 @@ export function useStore() {
 
   // Sync state to local storage (for guests)
   useEffect(() => {
-    if (!currentUser || currentUser.uid === 'guest_user') {
+    if (!loading && (!currentUser || currentUser.uid === 'guest_user')) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
-  }, [state, currentUser]);
+  }, [state, currentUser, loading]);
 
   const login = async () => {
     await loginWithGoogle();
