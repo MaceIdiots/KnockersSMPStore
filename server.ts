@@ -7,20 +7,61 @@ async function createServer() {
   const app = express();
   app.use(express.json());
 
-  // API routes
-  app.post("/api/notify-purchase", async (req, res) => {
-    const { playerName, items, amount } = req.body;
-    const token = process.env.DISCORD_BOT_TOKEN;
-    const channelId = process.env.DISCORD_CHANNEL_ID;
+  // API routes;
+  app.post("/api/checkout-success", async (req, res) => {
+  try {
+    const { username, itemName, price } = req.body;
 
-    if (!token || !channelId) {
-      console.warn("Discord configuration (DISCORD_BOT_TOKEN or DISCORD_CHANNEL_ID) is missing in environment variables. Purchase transaction succeeded, Discord notify skipped.");
-      return res.json({ 
-        status: "warning", 
-        message: "Discord notification skipped. Please define DISCORD_BOT_TOKEN and DISCORD_CHANNEL_ID in Settings." 
-      });
-    }
+    // 1. [Insert database deduction / player inventory addition here]
+    // await db.deductCoins(username, price);
+    // await db.grantItemToPlayer(username, itemName);
 
+    // 2. ⚡ INSERT DYNAMIC WEBHOOK NOTIFICATION HERE ⚡
+    // Call the function asynchronously so it doesn't block the user's checkout response.
+    notifyDiscordPurchase({
+      username: username || "Unknown Player",
+      itemName: itemName || "Unknown Item",
+      price: price || 0,
+    }).catch(err => console.error("Discord Notification failed to run async:", err));
+
+    // 3. Return successful response to the user
+    return res.status(200).json({
+      status: "success",
+      message: "Purchase processed successfully and items granted!",
+    });
+
+  } catch (error: any) {
+    console.error("Error processing checkout:", error);
+    return res.status(500).json({ error: "Failed to process target purchase." });
+  }
+});
+app.use(express.json());
+  try {
+    const { username, itemName, price } = req.body;
+
+    // 1. [Insert database deduction / player inventory addition here]
+    // await db.deductCoins(username, price);
+    // await db.grantItemToPlayer(username, itemName);
+
+    // 2. 🔥 INSERT DYNAMIC WEBHOOK NOTIFICATION HERE
+    // Call the function asynchronously so it doesn't block the user's checkout response.
+    notifyDiscordPurchase({
+      username: username || "Unknown Player",
+      itemName: itemName || "Unknown Item",
+      price: price || 0,
+    }).catch(err => console.error("Discord Notification failed to run async:", err));
+
+    // 3. Return successful response to the user
+    return res.status(200).json({
+      status: "success",
+      message: "Purchase processed successfully and items granted!"
+    });
+
+  } catch (error: any) {
+    console.error("Error processing checkout:", error)
+    return res.status(500).json({ error: "Failed to process target purchase." });
+  }
+});
     try {
       // Basic check for common misconfiguration (using bot ID as channel ID)
       if (token.includes(".")) {
