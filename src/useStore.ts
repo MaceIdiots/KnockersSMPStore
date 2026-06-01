@@ -176,14 +176,6 @@ export function useStore() {
         let needsUpdate = false;
         const updates: any = {};
 
-        // If old version detected, upgrade coins to 0
-        if (currentResetVersion < 3 && currentUser) {
-          console.log("OLD VERSION DETECTED: Setting migration/starting coins to 0.");
-          updates.coins = 0;
-          updates.resetVersion = 3;
-          needsUpdate = true;
-        }
-
         // Keep / merge guest-purchased progress after login safely
         const guestCoins = stateRef.current.coins;
         const guestKits = stateRef.current.ownedKits.filter(id => !data.ownedKits?.includes(id));
