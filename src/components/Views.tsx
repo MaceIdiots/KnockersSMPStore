@@ -769,6 +769,11 @@ export function ProfileView({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Sync state if profile changes in storage (e.g. from check-backup or multiple tabs)
+  useEffect(() => {
+    setFormData(profile);
+  }, [profile]);
+
   const [withdrawCoinsAmount, setWithdrawCoinsAmount] = useState<number>(0);
   const [withdrawnItem, setWithdrawnItem] = useState<{ code: string; command: string; itemLabel: string } | null>(null);
   const [isAdminResetting, setIsAdminResetting] = useState(false);
@@ -853,10 +858,14 @@ export function ProfileView({
   };
 
   const handlePfpChange = (name: string) => {
-    // Only auto-update if the current pfp is a standard Minecraft head URL
+    // Keep avatar updated if using official Minecraft skins
     const isMcUrl = formData.pfp.includes('mc-heads.net');
     if (isMcUrl) {
-      setFormData(prev => ({ ...prev, pfp: `https://mc-heads.net/avatar/${name}` }));
+      // Determine what style was being used (avatar, head, or body) and preserve it when name changes
+      let style = 'avatar';
+      if (formData.pfp.includes('/head/')) style = 'head';
+      if (formData.pfp.includes('/body/')) style = 'body';
+      setFormData(prev => ({ ...prev, pfp: `https://mc-heads.net/${style}/${name}` }));
     }
   };
 
@@ -869,7 +878,43 @@ export function ProfileView({
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, pfp: reader.result as string }));
+        const img = new Image();
+        img.src = reader.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const max_size = 120;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height) {
+            if (width > max_size) {
+              height *= max_size / width;
+              width = max_size;
+            }
+          } else {
+            if (height > max_size) {
+              width *= max_size / height;
+              height = max_size;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+            ctx.drawImage(img, 0, 0, width, height);
+            try {
+              const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+              setFormData(prev => ({ ...prev, pfp: compressedBase64 }));
+            } catch (err) {
+              setFormData(prev => ({ ...prev, pfp: reader.result as string }));
+            }
+          } else {
+            setFormData(prev => ({ ...prev, pfp: reader.result as string }));
+          }
+        };
       };
       reader.readAsDataURL(file);
     }
@@ -1032,7 +1077,88 @@ export function ProfileView({
               <p className="text-[10px] text-gray-600 italic">Changing your name automatically updates your avatar skin.</p>
             </div>
 
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                <Camera size={12} /> Avatar Skin Perspective
+              </label>
+              {formData.pfp.includes('mc-heads.net') ? (
+                <div className="grid grid-cols-3 gap-2 bg-black/35 p-1 px-1.5 border border-smp-border pixel-corners min-h-[76px] items-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, pfp: `https://mc-heads.net/avatar/${prev.name || 'Steve'}` }));
+                    }}
+                    className={`py-2 px-1 text-[9px] font-bold uppercase transition-colors pixel-corners flex flex-col items-center gap-1.5 border ${
+                      formData.pfp.includes('/avatar/')
+                        ? 'bg-smp-red text-white border-white'
+                        : 'bg-smp-bg text-gray-400 hover:text-white border-transparent hover:bg-white/5'
+                    }`}
+                  >
+                    <img 
+                      src={`https://mc-heads.net/avatar/${formData.name || 'Steve'}`} 
+                      className="w-8 h-8 pixel-corners" 
+                      alt="2D Head"
+                      onError={(e) => { (e.target as any).src = 'https://mc-heads.net/avatar/Steve'; }}
+                    />
+                    <span>2D Head</span>
+                  </button>
 
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, pfp: `https://mc-heads.net/head/${prev.name || 'Steve'}` }));
+                    }}
+                    className={`py-2 px-1 text-[9px] font-bold uppercase transition-colors pixel-corners flex flex-col items-center gap-1.5 border ${
+                      formData.pfp.includes('/head/')
+                        ? 'bg-smp-red text-white border-white'
+                        : 'bg-smp-bg text-gray-400 hover:text-white border-transparent hover:bg-white/5'
+                    }`}
+                  >
+                    <img 
+                      src={`https://mc-heads.net/head/${formData.name || 'Steve'}`} 
+                      className="w-8 h-8 object-contain" 
+                      alt="3D Isometric"
+                      onError={(e) => { (e.target as any).src = 'https://mc-heads.net/head/Steve'; }}
+                    />
+                    <span>3D Head</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, pfp: `https://mc-heads.net/body/${prev.name || 'Steve'}` }));
+                    }}
+                    className={`py-2 px-1 text-[9px] font-bold uppercase transition-colors pixel-corners flex flex-col items-center gap-1.5 border ${
+                      formData.pfp.includes('/body/')
+                        ? 'bg-smp-red text-white border-white'
+                        : 'bg-smp-bg text-gray-400 hover:text-white border-transparent hover:bg-white/5'
+                    }`}
+                  >
+                    <img 
+                      src={`https://mc-heads.net/body/${formData.name || 'Steve'}`} 
+                      className="w-8 h-8 object-contain" 
+                      alt="3D Body"
+                      onError={(e) => { (e.target as any).src = 'https://mc-heads.net/body/Steve'; }}
+                    />
+                    <span>3D Body</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center bg-black/35 p-3 border border-smp-border pixel-corners min-h-[76px]">
+                  <div className="text-center">
+                    <p className="text-[10px] font-bold text-yellow-500 uppercase tracking-wider mb-0.5">CUSTOM UPLOAD ACTIVE</p>
+                    <button 
+                      type="button"
+                      onClick={() => resetToMcSkin()}
+                      className="text-[9px] text-gray-400 hover:text-white flex items-center justify-center gap-1 mx-auto"
+                    >
+                      <Trash2 size={10} /> Restore skin pfp instead
+                    </button>
+                  </div>
+                </div>
+              )}
+              <p className="text-[10px] text-gray-600 italic">Select how your official Minecraft character is visualised above.</p>
+            </div>
           </div>
 
           <div className="space-y-3">
