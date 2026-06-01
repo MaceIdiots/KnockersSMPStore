@@ -67,7 +67,7 @@ export const KITS: Kit[] = [
     id: 'knocker',
     name: 'Knocker Kit',
     rank: 'Copper Kit',
-    price: 22750,
+    price: 45000,
     description: 'The essential starter kit. Balanced for early game survival.',
     items: ['Copper Sword', 'Copper Pickaxe', 'Full Copper Armor', '16x Steak'],
   },
