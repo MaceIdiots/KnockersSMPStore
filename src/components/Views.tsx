@@ -835,6 +835,7 @@ export function ProfileView({
     e.preventDefault();
     setErrorMessage(null);
     setIsSaving(true);
+    setStatus('idle');
 
     try {
       // Check name availability
@@ -846,11 +847,12 @@ export function ProfileView({
         return;
       }
 
-      onUpdateProfile(formData);
+      await onUpdateProfile(formData);
       setStatus('success');
       setTimeout(() => setStatus('idle'), 3000);
-    } catch (e) {
-      setErrorMessage("An error occurred while checking name status.");
+    } catch (e: any) {
+      console.error("Profile save error: ", e);
+      setErrorMessage(e?.message || "An error occurred while saving profile changes. Check internet or username rules.");
       setStatus('error');
     } finally {
       setIsSaving(false);

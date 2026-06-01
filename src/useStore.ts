@@ -855,18 +855,30 @@ export function useStore() {
     if (!name) return true;
     const normalized = name.trim().toLowerCase();
     
-    // Check Firestore registry if real user
-    const isRealUser = currentUser && currentUser.uid !== 'guest_user';
-    if (isRealUser) {
-      const nameDoc = await getDoc(doc(db, 'usernames', normalized));
-      if (nameDoc.exists() && nameDoc.data().uid !== currentUser?.uid) {
-        return false;
+    // If name is the same as current profile name, it is always available
+    if (state.profile.name && state.profile.name.trim().toLowerCase() === normalized) {
+      return true;
+    }
+
+    try {
+      // Check Firestore registry if real user
+      const isRealUser = currentUser && currentUser.uid !== 'guest_user';
+      if (isRealUser) {
+        const nameDoc = await getDoc(doc(db, 'usernames', normalized));
+        if (nameDoc.exists()) {
+          const data = nameDoc.data();
+          if (data && data.uid !== currentUser?.uid) {
+            return false;
+          }
+        }
       }
+    } catch (e) {
+      console.warn("Firestore checkNameAvailability failed, falling back to local list:", e);
     }
 
     // Check against initial set
     for (const taken of INITIAL_TAKEN_NAMES) {
-      if (taken.toLowerCase() === normalized && name !== state.profile.name) {
+      if (taken.toLowerCase() === normalized) {
         return false;
       }
     }
