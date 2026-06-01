@@ -7,94 +7,55 @@ async function createServer() {
   const app = express();
   app.use(express.json());
 
-  // API routes;
-  app.post("/api/checkout-success", async (req, res) => {
-  try {
-    const { username, itemName, price } = req.body;
+  // API routes
+  app.post("/api/notify-purchase", async (req, res) => {
+    // Extract playerName, itemName, and price from req.body, with fallbacks for alternative formats
+    const playerName = req.body.playerName || req.body.username || req.body.player_name || "Unknown Player";
+    const itemName = req.body.itemName || (Array.isArray(req.body.items) ? req.body.items.join(", ") : req.body.items) || "Unknown Item";
+    const price = req.body.price !== undefined ? req.body.price : (req.body.amount !== undefined ? req.body.amount : "0");
 
-    // 1. [Insert database deduction / player inventory addition here]
-    // await db.deductCoins(username, price);
-    // await db.grantItemToPlayer(username, itemName);
+    const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
 
-    // 2. ⚡ INSERT DYNAMIC WEBHOOK NOTIFICATION HERE ⚡
-    // Call the function asynchronously so it doesn't block the user's checkout response.
-    notifyDiscordPurchase({
-      username: username || "Unknown Player",
-      itemName: itemName || "Unknown Item",
-      price: price || 0,
-    }).catch(err => console.error("Discord Notification failed to run async:", err));
+    if (!webhookUrl) {
+      console.warn("DISCORD_WEBHOOK_URL environment variable is missing in settings. Purchase webhook skipped.");
+      return res.status(400).json({ 
+        status: "error", 
+        message: "Discord notification skipped. DISCORD_WEBHOOK_URL is not defined in settings." 
+      });
+    }
 
-    // 3. Return successful response to the user
-    return res.status(200).json({
-      status: "success",
-      message: "Purchase processed successfully and items granted!",
-    });
-
-  } catch (error: any) {
-    console.error("Error processing checkout:", error);
-    return res.status(500).json({ error: "Failed to process target purchase." });
-  }
-});
-app.use(express.json());
-  try {
-    const { username, itemName, price } = req.body;
-
-    // 1. [Insert database deduction / player inventory addition here]
-    // await db.deductCoins(username, price);
-    // await db.grantItemToPlayer(username, itemName);
-
-    // 2. 🔥 INSERT DYNAMIC WEBHOOK NOTIFICATION HERE
-    // Call the function asynchronously so it doesn't block the user's checkout response.
-    notifyDiscordPurchase({
-      username: username || "Unknown Player",
-      itemName: itemName || "Unknown Item",
-      price: price || 0,
-    }).catch(err => console.error("Discord Notification failed to run async:", err));
-
-    // 3. Return successful response to the user
-    return res.status(200).json({
-      status: "success",
-      message: "Purchase processed successfully and items granted!"
-    });
-
-  } catch (error: any) {
-    console.error("Error processing checkout:", error)
-    return res.status(500).json({ error: "Failed to process target purchase." });
-  }
-});
     try {
-      // Basic check for common misconfiguration (using bot ID as channel ID)
-      if (token.includes(".")) {
-        const botIdPart = token.split(".")[0];
-        try {
-          const decodedBotId = Buffer.from(botIdPart, 'base64').toString('utf8');
-          if (decodedBotId === channelId) {
-            console.warn("CRITICAL: DISCORD_CHANNEL_ID matches the Bot ID extracted from DISCORD_BOT_TOKEN. You likely used your Bot ID instead of a Channel ID.");
-          }
-        } catch (e) {
-          // ignore decode errors
-        }
-      }
-
-      const response = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+      const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
-          "Authorization": `Bot ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           embeds: [
             {
-              title: "💰 New Purchase!",
-              description: `**${playerName}** has just made a purchase in the Knockers SMP Store!`,
-              color: 0xff0000, // SMP Red
+              title: "💰 Successful Store Purchase!",
+              description: "A new transaction was processed successfully in the web store.",
+              color: 0xDC2626, // Solid red border color to match the site's theme
               fields: [
-                { name: "Items", value: items.join(", "), inline: true },
-                { name: "Total Spent", value: `${amount} Coins`, inline: true },
+                {
+                  name: "👤 Player Username",
+                  value: `\`\`\`${playerName}\`\`\``,
+                  inline: true
+                },
+                {
+                  name: "🎁 Bought Item",
+                  value: `\`\`\`${itemName}\`\`\``,
+                  inline: true
+                },
+                {
+                  name: "🪙 Total Price",
+                  value: `\`\`\`${price} Coins\`\`\``,
+                  inline: true
+                }
               ],
               timestamp: new Date().toISOString(),
               footer: {
-                text: "Knockers SMP Official Store",
+                text: "Knockers SMP Official Web Store",
               },
             },
           ],
@@ -102,28 +63,20 @@ app.use(express.json());
       });
 
       if (!response.ok) {
-        let errorData: any = {};
-        try {
-          errorData = await response.json();
-        } catch (e) {
-          errorData = { message: "Could not parse response" };
-        }
-        console.error("Discord API error details:", JSON.stringify(errorData));
-        
-        // We log the error on the server but return 200 JSON with status warning/error info
-        // so that the local storefront purchase flow is still fully completed.
-        return res.json({ 
-          status: "warning", 
-          message: `Discord endpoint returned non-OK status (${response.status}). Purchase succeeded locally. Error: ${errorData.message || 'Unauthorized or bad channel request.'}` 
+        const errorText = await response.text();
+        console.error("Discord Webhook API returned non-OK status:", response.status, errorText);
+        return res.status(500).json({ 
+          status: "error", 
+          message: `Discord endpoint returned non-OK status (${response.status}).` 
         });
       }
 
-      res.json({ status: "ok" });
+      return res.json({ status: "ok", message: "Discord webhook notification dispatched successfully!" });
     } catch (error: any) {
-      console.error("Notification error:", error);
-      res.json({ 
-        status: "warning", 
-        message: `Network error of purchase notification: ${error.message || error}` 
+      console.error("Webhook processing error in buy notify route:", error);
+      return res.status(500).json({ 
+        status: "error", 
+        message: `Internal server error during Discord Webhook dispatch: ${error.message || error}` 
       });
     }
   });
