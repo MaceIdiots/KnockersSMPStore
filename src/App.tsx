@@ -22,6 +22,7 @@ export default function App() {
     currentUser,
     loading,
     login,
+    loginAsGuest,
     logout,
     buyKit, 
     buyRole, 
@@ -40,7 +41,10 @@ export default function App() {
     sendMessage,
     markRead,
     checkNameAvailability,
-    subscribeToMessages
+    subscribeToMessages,
+    adminResetAllCoins,
+    withdrawKit,
+    withdrawCoins
   } = useStore();
 
   if (loading) {
@@ -58,7 +62,7 @@ export default function App() {
   }
 
   if (!currentUser) {
-    return <LoginView onLogin={login} />;
+    return <LoginView onLogin={login} onLoginAsGuest={loginAsGuest} />;
   }
 
   return (
@@ -132,6 +136,13 @@ export default function App() {
                 profile={state.profile}
                 onUpdateProfile={updateProfile}
                 onCheckName={checkNameAvailability}
+                currentUser={currentUser}
+                coins={state.coins}
+                ownedKits={state.ownedKits}
+                ownedRoles={state.ownedRoles}
+                onWithdrawKit={withdrawKit}
+                onWithdrawCoins={withdrawCoins}
+                onAdminResetAllCoins={adminResetAllCoins}
               />
             )}
           </motion.div>

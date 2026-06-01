@@ -40,7 +40,7 @@ const DEFAULT_STATE: UserState = {
   messages: {},
   lastWorked: null,
   lastDailyReward: null,
-  resetVersion: 2, // Current version
+  resetVersion: 3, // Current version
 };
 
 // Initial list of "canonical" names in the SMP to simulate "taken" names
@@ -71,19 +71,31 @@ export function useStore() {
     initAuth();
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      if (!user) {
-        // Load from local storage if not logged in
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            setState(prev => ({ ...prev, ...parsed }));
-          } catch (e) {
-            console.error('Local state load failed', e);
-          }
+      if (user) {
+        setCurrentUser(user);
+        localStorage.removeItem('smp_guest_user');
+      } else {
+        const isGuest = localStorage.getItem('smp_guest_user') === 'true';
+        if (isGuest) {
+          setCurrentUser({
+            uid: 'guest_user',
+            email: 'guest@knockers.smp',
+            displayName: 'Guest Player'
+          } as any);
         } else {
-          setState(DEFAULT_STATE);
+          setCurrentUser(null);
+          // Load from local storage if not logged in
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              setState(prev => ({ ...prev, ...parsed }));
+            } catch (e) {
+              console.error('Local state load failed', e);
+            }
+          } else {
+            setState(DEFAULT_STATE);
+          }
         }
       }
       setLoading(false);
@@ -93,7 +105,10 @@ export function useStore() {
 
   // Sync with Firestore if logged in
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || currentUser.uid === 'guest_user') {
+      setLoading(false);
+      return;
+    }
 
     const userDoc = doc(db, 'users', currentUser.uid);
 
@@ -104,9 +119,9 @@ export function useStore() {
         const firestoreCoins = data.coins ?? 0;
         const currentResetVersion = data.resetVersion ?? 0;
         
-        if (currentResetVersion < 2 && currentUser) {
+        if (currentResetVersion < 3 && currentUser) {
           console.log("OLD VERSION DETECTED: Resetting coins to 0 as requested.");
-          updateDoc(userDoc, { coins: 0, resetVersion: 2 }).catch(console.error);
+          updateDoc(userDoc, { coins: 0, resetVersion: 3 }).catch(console.error);
           return; // Wait for next snapshot
         }
 
@@ -131,7 +146,7 @@ export function useStore() {
           ownedRoles: [],
           lastWorked: null,
           lastDailyReward: null,
-          resetVersion: 2,
+          resetVersion: 3,
           createdAt: serverTimestamp(),
           friends: [],
           sentRequests: []
@@ -207,7 +222,7 @@ export function useStore() {
 
   // Sync state to local storage (for guests)
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser || currentUser.uid === 'guest_user') {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
   }, [state, currentUser]);
@@ -216,8 +231,21 @@ export function useStore() {
     await loginWithGoogle();
   };
 
+  const loginAsGuest = () => {
+    localStorage.setItem('smp_guest_user', 'true');
+    setCurrentUser({
+      uid: 'guest_user',
+      email: 'guest@knockers.smp',
+      displayName: 'Guest Player'
+    } as any);
+  };
+
   const logout = async () => {
-    await signOut(auth);
+    localStorage.removeItem('smp_guest_user');
+    if (currentUser && currentUser.uid !== 'guest_user') {
+      await signOut(auth);
+    }
+    setCurrentUser(null);
     setState(DEFAULT_STATE);
   };
 
@@ -673,10 +701,13 @@ export function useStore() {
     if (!name) return true;
     const normalized = name.trim().toLowerCase();
     
-    // Check Firestore registry
-    const nameDoc = await getDoc(doc(db, 'usernames', normalized));
-    if (nameDoc.exists() && nameDoc.data().uid !== currentUser?.uid) {
-      return false;
+    // Check Firestore registry if real user
+    const isRealUser = currentUser && currentUser.uid !== 'guest_user';
+    if (isRealUser) {
+      const nameDoc = await getDoc(doc(db, 'usernames', normalized));
+      if (nameDoc.exists() && nameDoc.data().uid !== currentUser?.uid) {
+        return false;
+      }
     }
 
     // Check against initial set
@@ -689,11 +720,101 @@ export function useStore() {
     return true;
   };
 
+  const adminResetAllCoins = async () => {
+    const isRealUser = currentUser && currentUser.uid !== 'guest_user';
+    
+    // Wipe local state
+    setState(prev => ({
+      ...prev,
+      coins: 0,
+    }));
+
+    if (isRealUser) {
+      try {
+        const { getDocs, writeBatch } = await import('firebase/firestore');
+        const usersCol = collection(db, 'users');
+        const snapshot = await getDocs(usersCol);
+        const batch = writeBatch(db);
+        
+        snapshot.docs.forEach((docSnap) => {
+          if (docSnap.id === currentUser.uid) {
+            batch.update(docSnap.ref, { coins: 0, resetVersion: 3 });
+          } else {
+            batch.update(docSnap.ref, { coins: 0 });
+          }
+        });
+        
+        await batch.commit();
+        console.log("Successfully reset all users' coins to 0.");
+        return true;
+      } catch (e) {
+        console.error("Failed to batch reset coins:", e);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const withdrawKit = async (kitId: string) => {
+    if (state.ownedKits.includes(kitId)) {
+      // Consume the kit
+      setState(prev => ({
+        ...prev,
+        ownedKits: prev.ownedKits.filter(id => id !== kitId),
+      }));
+
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const command = `/claimkit ${kitId} ${code}`;
+
+      const isRealUser = currentUser && currentUser.uid !== 'guest_user';
+      if (isRealUser) {
+        await updateDoc(doc(db, 'users', currentUser.uid), { 
+          ownedKits: arrayRemove(kitId)
+        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+      }
+      
+      return {
+        success: true,
+        code,
+        command
+      };
+    }
+    return { success: false, code: '', command: '' };
+  };
+
+  const withdrawCoins = async (amount: number) => {
+    if (state.coins >= amount && amount > 0) {
+      setState(prev => ({
+        ...prev,
+        coins: prev.coins - amount,
+      }));
+
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const command = `/withdraw ${state.profile.name || 'Player'} ${amount} ${code}`;
+
+      const isRealUser = currentUser && currentUser.uid !== 'guest_user';
+      if (isRealUser) {
+        const { increment } = await import('firebase/firestore');
+        await updateDoc(doc(db, 'users', currentUser.uid), { 
+          coins: increment(-amount)
+        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+      }
+
+      return {
+        success: true,
+        code,
+        command
+      };
+    }
+    return { success: false, code: '', command: '' };
+  };
+
   return {
     state,
     currentUser,
     loading,
     login,
+    loginAsGuest,
     logout,
     updateProfile,
     addCoins,
@@ -714,5 +835,8 @@ export function useStore() {
     markRead,
     checkNameAvailability,
     subscribeToMessages,
+    adminResetAllCoins,
+    withdrawKit,
+    withdrawCoins,
   };
 }
