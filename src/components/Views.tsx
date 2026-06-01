@@ -866,14 +866,16 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
     try {
       if (onLogin) await onLogin();
     } catch (err: any) {
+      console.error('Full Login Error Object:', err);
       if (err.code === 'auth/cancelled-popup-request') {
         setError('Login attempt was cancelled. Please try again.');
       } else if (err.code === 'auth/popup-closed-by-user') {
         setError('Login window was closed. Please try again.');
+      } else if (err.message && err.message.includes('auth/popup-blocked')) {
+        setError('Popup was blocked by your browser. Please allow popups for this site.');
       } else {
-        setError('An unexpected login error occurred.');
+        setError(`Login failed: ${err.message || 'Unknown error'}`);
       }
-      console.error('Login error:', err);
     } finally {
       setLoading(false);
     }
@@ -902,6 +904,7 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
 
         <div className="space-y-4 relative z-10">
           <button 
+            type="button"
             onClick={handleLogin}
             disabled={loading}
             className={`w-full py-5 bg-white text-black font-bold text-xl pixel-corners transition-all flex items-center justify-center gap-3 shadow-[0_8px_0_0_#d1d5db] active:shadow-none active:translate-y-2 hover:bg-gray-100 group ${loading ? 'opacity-50 cursor-not-allowed shadow-none' : ''}`}

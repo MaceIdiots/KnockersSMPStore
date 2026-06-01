@@ -57,10 +57,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 export async function loginWithGoogle() {
   try {
+    // Force a specific domain if we're in an iframe environment that might confuse Firebase
+    // But usually Firebase SDK handles this. 
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
-  } catch (error) {
-    console.error('Login error:', error);
+  } catch (error: any) {
+    if (error.code === 'auth/popup-blocked') {
+      console.error('Popup blocked');
+    }
+    console.error('Login error detail:', error);
     throw error;
   }
 }

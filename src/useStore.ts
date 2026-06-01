@@ -59,6 +59,10 @@ export function useStore() {
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
+            // Ensure at least 100k even in local storage for this demo as requested
+            if (typeof parsed.coins === 'number' && parsed.coins < 100000) {
+              parsed.coins = 100000;
+            }
             setState(prev => ({ ...prev, ...parsed }));
           } catch (e) {
             console.error('Local state load failed', e);
