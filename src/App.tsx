@@ -41,10 +41,7 @@ export default function App() {
     sendMessage,
     markRead,
     checkNameAvailability,
-    subscribeToMessages,
-    adminResetAllCoins,
-    withdrawKit,
-    withdrawCoins
+    subscribeToMessages
   } = useStore();
 
   if (loading) {
@@ -115,11 +112,8 @@ export default function App() {
                 onCheckName={checkNameAvailability}
                 currentUser={currentUser}
                 coins={state.coins}
-                ownedKits={state.ownedKits}
+                  ownedKits={state.ownedKits}
                 ownedRoles={state.ownedRoles}
-                onWithdrawKit={withdrawKit}
-                onWithdrawCoins={withdrawCoins}
-                onAdminResetAllCoins={adminResetAllCoins}
               />
             )}
           </motion.div>

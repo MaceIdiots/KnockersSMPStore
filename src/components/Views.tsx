@@ -748,9 +748,6 @@ export function ProfileView({
   coins,
   ownedKits,
   ownedRoles,
-  onWithdrawKit,
-  onWithdrawCoins,
-  onAdminResetAllCoins,
 }: { 
   profile: UserProfile; 
   onUpdateProfile: (profile: Partial<UserProfile>) => void; 
@@ -759,9 +756,6 @@ export function ProfileView({
   coins: number;
   ownedKits: string[];
   ownedRoles: string[];
-  onWithdrawKit: (kitId: string) => Promise<{ success: boolean; code: string; command: string }>;
-  onWithdrawCoins: (amount: number) => Promise<{ success: boolean; code: string; command: string }>;
-  onAdminResetAllCoins: () => Promise<boolean>;
 }) {
   const [formData, setFormData] = useState(profile);
   const [isSaving, setIsSaving] = useState(false);
@@ -773,63 +767,6 @@ export function ProfileView({
   useEffect(() => {
     setFormData(profile);
   }, [profile]);
-
-  const [withdrawCoinsAmount, setWithdrawCoinsAmount] = useState<number>(0);
-  const [withdrawnItem, setWithdrawnItem] = useState<{ code: string; command: string; itemLabel: string } | null>(null);
-  const [isAdminResetting, setIsAdminResetting] = useState(false);
-  const [adminResetSuccess, setAdminResetSuccess] = useState(false);
-
-  const handleWithdrawCoins = async (e: FormEvent) => {
-    e.preventDefault();
-    if (withdrawCoinsAmount <= 0 || withdrawCoinsAmount > coins) return;
-    try {
-      const res = await onWithdrawCoins(withdrawCoinsAmount);
-      if (res.success) {
-        setWithdrawnItem({
-          code: res.code,
-          command: res.command,
-          itemLabel: `${withdrawCoinsAmount.toLocaleString()} Coins Voucher`
-        });
-        setWithdrawCoinsAmount(0);
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleWithdrawKit = async (kitId: string, kitName: string) => {
-    try {
-      const res = await onWithdrawKit(kitId);
-      if (res.success) {
-        setWithdrawnItem({
-          code: res.code,
-          command: res.command,
-          itemLabel: kitName
-        });
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAdminReset = async () => {
-    if (!window.confirm("⚠️ WARNING: This will immediately format and reset EVERY user's coin balance inside Firebase to 0! Are you absolutely sure you want to enforce this command?")) {
-      return;
-    }
-    setIsAdminResetting(true);
-    setAdminResetSuccess(false);
-    try {
-      const success = await onAdminResetAllCoins();
-      if (success) {
-        setAdminResetSuccess(true);
-        setTimeout(() => setAdminResetSuccess(false), 5000);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsAdminResetting(false);
-    }
-  };
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
@@ -924,75 +861,6 @@ export function ProfileView({
 
   return (
     <div className="max-w-4xl mx-auto pb-32 px-4 relative">
-      {/* Dynamic Claim/Voucher Modal Screen */}
-      <AnimatePresence>
-        {withdrawnItem && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
-          >
-            <motion.div 
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 10 }}
-              className="bg-smp-card border-4 border-green-500 max-w-lg w-full p-8 md:p-10 pixel-corners text-center space-y-6 shadow-[0_20px_50px_rgba(34,197,94,0.15)]"
-            >
-              <div className="w-16 h-16 bg-green-500 mx-auto flex items-center justify-center pixel-corners glow-green shadow-xl">
-                <Check size={36} className="text-white animate-bounce" />
-              </div>
-              <div className="space-y-4">
-                <h3 className="text-2xl font-bold uppercase italic text-green-400">WITHDRAWAL SUCCESSFUL!</h3>
-                <p className="text-xs text-gray-400 uppercase tracking-wider">
-                  You successfully withdrew <span className="text-white font-extrabold">{withdrawnItem.itemLabel}</span> from your web storage.
-                </p>
-              </div>
-
-              <div className="bg-black/40 border-2 border-smp-border p-5 space-y-3 relative overflow-hidden pixel-corners">
-                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest text-left">
-                  In-Game Claim Voucher Command
-                </p>
-                <div className="bg-smp-bg font-mono text-sm px-4 py-3 border border-white/5 select-all break-all text-left text-green-300">
-                  {withdrawnItem.command}
-                </div>
-                <div className="flex justify-between items-center gap-4 pt-1">
-                  <span className="text-[10px] text-gray-500 uppercase font-semibold">Verification Code: <strong className="text-white">{withdrawnItem.code}</strong></span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(withdrawnItem.command);
-                      alert("Claim command copied to clipboard!");
-                    }}
-                    className="bg-green-600 hover:bg-green-400 text-white font-bold text-xs px-4 py-2 pixel-corners transition-colors"
-                  >
-                    COPY COMMAND
-                  </button>
-                </div>
-              </div>
-
-              <div className="text-left text-xs bg-white/5 border border-white/10 p-4 space-y-2 text-gray-400">
-                <p className="font-extrabold uppercase text-white tracking-wide text-[10px] flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full inline-block" /> HOW TO REDEEM IN-GAME:
-                </p>
-                <ol className="list-decimal pl-5 space-y-1 text-[11px] leading-relaxed">
-                  <li>Log on to the Minecraft server (IP: <strong className="text-smp-red">knockers.smp</strong>).</li>
-                  <li>Open the in-game chat box by pressing <kbd className="bg-white/10 px-1 py-0.5 font-mono text-[9px]">T</kbd>.</li>
-                  <li>Paste the copied command above and press <kbd className="bg-white/10 px-1 py-0.5 font-mono text-[9px]">Enter</kbd> to redeem your items instantly!</li>
-                </ol>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setWithdrawnItem(null)}
-                className="w-full py-4 bg-white/10 text-white font-bold uppercase hover:bg-white hover:text-black hover:pixel-corners transition-all"
-              >
-                CLOSE VAULT RECEIPT
-              </button>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -1205,150 +1073,6 @@ export function ProfileView({
           </div>
         </form>
       </motion.div>
-
-      {/* Player Storage Vault */}
-      <div className="mt-10 bg-smp-card border-2 border-smp-border p-8 md:p-12 space-y-10 pixel-corners">
-        <div className="border-b border-white/5 pb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h3 className="text-2xl font-bold uppercase italic tracking-tight text-white flex items-center gap-3">
-              <Gift size={24} className="text-smp-red animate-pulse" /> Player Storage Vault
-            </h3>
-            <p className="text-xs text-gray-500 uppercase tracking-widest">
-              Withdraw purchased kits or convert coins to copyable vouchers for in-game play
-            </p>
-          </div>
-          <div className="bg-black/30 border border-smp-border px-4 py-2 flex items-center gap-2 pixel-corners shrink-0">
-            <Coins size={16} className="text-yellow-500" />
-            <span className="font-mono text-sm font-bold text-yellow-500">{coins.toLocaleString()} COINS</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Coin Withdrawal Station */}
-          <div className="space-y-4 bg-black/25 border border-white/5 p-6 pixel-corners flex flex-col justify-between">
-            <div className="space-y-1">
-              <h4 className="font-bold text-sm uppercase italic text-yellow-500 flex items-center gap-2">
-                <Coins size={16} /> Cashout Coin Registry
-              </h4>
-              <p className="text-xs text-gray-400">
-                Type the amount of web-store coins you want to convert into in-game wallet currency.
-              </p>
-            </div>
-            <form onSubmit={handleWithdrawCoins} className="space-y-4 pt-4">
-              <div className="relative">
-                <input
-                  type="number"
-                  min="1"
-                  max={coins}
-                  value={withdrawCoinsAmount || ''}
-                  onChange={(e) => setWithdrawCoinsAmount(Math.min(coins, Math.max(0, parseInt(e.target.value) || 0)))}
-                  placeholder="Enter coin value to claim..."
-                  className="w-full bg-smp-bg border-2 border-smp-border font-mono font-bold px-4 py-3 outline-none text-yellow-500 focus:border-yellow-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => setWithdrawCoinsAmount(coins)}
-                  className="absolute right-3 top-3.5 text-[10px] bg-yellow-500/10 border border-yellow-500/30 hover:bg-yellow-500 hover:text-black font-extrabold uppercase px-2 py-0.5 transition-all text-yellow-500"
-                >
-                  MAX
-                </button>
-              </div>
-
-              <button
-                type="submit"
-                disabled={withdrawCoinsAmount <= 0 || withdrawCoinsAmount > coins}
-                className="w-full py-4 bg-yellow-500 hover:bg-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-extrabold text-xs uppercase tracking-wider pixel-corners shadow-[0_4px_0_0_#ca8a04]"
-              >
-                CLAIM COINS VOUCHER
-              </button>
-            </form>
-          </div>
-
-          {/* Kits Claiming Depot */}
-          <div className="space-y-4 bg-black/25 border border-white/5 p-6 pixel-corners flex flex-col justify-between">
-            <div className="space-y-1">
-              <h4 className="font-bold text-sm uppercase italic text-smp-red flex items-center gap-2">
-                <Gift size={16} /> Direct Kit Dispensary
-              </h4>
-              <p className="text-xs text-gray-400">
-                Click claim on any kit purchased in the online webstore to generate its Minecraft unlock code.
-              </p>
-            </div>
-
-            {ownedKits.length === 0 ? (
-              <div className="py-8 text-center text-xs text-gray-500 uppercase tracking-widest border border-dashed border-white/10 rounded-none bg-black/10 mt-4">
-                No kits owned in storage.
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-48 overflow-y-auto pr-1 mt-4">
-                {ownedKits.map((kitId) => {
-                  const kitInfo = KITS.find(k => k.id === kitId);
-                  return (
-                    <div key={kitId} className="bg-smp-bg p-3 border border-white/5 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-smp-red/10 border border-smp-red/30 flex items-center justify-center pixel-corners shrink-0">
-                          <Gift size={16} className="text-smp-red" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-xs uppercase text-white truncate max-w-[120px]">{kitInfo?.name || kitId}</p>
-                          <p className="text-[9px] text-gray-500">READY FOR DISPATCH</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleWithdrawKit(kitId, kitInfo?.name || kitId)}
-                        className="bg-smp-red hover:bg-white hover:text-black text-white font-extrabold text-[10px] uppercase px-4 py-2 pixel-corners transition-all"
-                      >
-                        WITHDRAW
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Admin Panel (Economy formatting) */}
-      <div className="mt-10 bg-red-950/20 border-2 border-red-500/25 p-8 md:p-12 space-y-6 pixel-corners">
-        <div className="space-y-2">
-          <div className="flex items-center gap-3">
-            <span className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse inline-block" />
-            <h3 className="text-2xl font-bold uppercase italic tracking-tight text-red-500 flex items-center gap-1.5">
-              Admin Operations Command Control
-            </h3>
-          </div>
-          <p className="text-xs text-gray-400 uppercase tracking-widest leading-relaxed">
-            Authorized SMP server maintenance and economy balancing dashboard. Accessible globally in preview sandbox mode.
-          </p>
-        </div>
-
-        <div className="bg-black/35 border border-red-500/20 p-6 space-y-3 pixel-corners">
-          <p className="font-extrabold uppercase text-xs tracking-wider text-red-400 flex items-center gap-1.5">
-            Reset Coin Ledger to 0
-          </p>
-          <p className="text-[11px] leading-relaxed text-gray-500 max-w-2xl">
-            This administrative operation formats and purges all current coins in circulation, setting the wallet of all players database-wide to exactly <strong className="text-white">0 coins (Economy Balance)</strong>. All subsequent new profile registrations are initialized directly to <strong className="text-white">0 coins</strong>.
-          </p>
-          
-          <div className="pt-4 flex flex-col sm:flex-row items-center gap-4">
-            <button
-              type="button"
-              disabled={isAdminResetting}
-              onClick={handleAdminReset}
-              className="bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white font-extrabold text-xs uppercase px-8 py-4 pixel-corners tracking-wider transition-colors shadow-[0_4px_0_0_#991b1b]"
-            >
-              {isAdminResetting ? 'PURGING LEDGER...' : 'RESET DATABASE WALLETS TO 0'}
-            </button>
-            {adminResetSuccess && (
-              <span className="text-green-400 text-xs font-bold uppercase italic tracking-wider animate-pulse">
-                ✓ Economy Wiped! All coins set to 0.
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
 
       <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white/5 border border-white/10 p-6 pixel-corners flex items-center gap-4 text-gray-400">

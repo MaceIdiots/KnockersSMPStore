@@ -822,95 +822,6 @@ export function useStore() {
     return true;
   };
 
-  const adminResetAllCoins = async () => {
-    const isRealUser = currentUser && currentUser.uid !== 'guest_user';
-    
-    // Wipe local state
-    setState(prev => ({
-      ...prev,
-      coins: 0,
-    }));
-
-    if (isRealUser) {
-      try {
-        const { getDocs, writeBatch } = await import('firebase/firestore');
-        const usersCol = collection(db, 'users');
-        const snapshot = await getDocs(usersCol);
-        const batch = writeBatch(db);
-        
-        snapshot.docs.forEach((docSnap) => {
-          if (docSnap.id === currentUser.uid) {
-            batch.update(docSnap.ref, { coins: 0, resetVersion: 3 });
-          } else {
-            batch.update(docSnap.ref, { coins: 0 });
-          }
-        });
-        
-        await batch.commit();
-        console.log("Successfully reset all users' coins to 0.");
-        return true;
-      } catch (e) {
-        console.error("Failed to batch reset coins:", e);
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const withdrawKit = async (kitId: string) => {
-    if (state.ownedKits.includes(kitId)) {
-      // Consume the kit
-      setState(prev => ({
-        ...prev,
-        ownedKits: prev.ownedKits.filter(id => id !== kitId),
-      }));
-
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const command = `/claimkit ${kitId} ${code}`;
-
-      const isRealUser = currentUser && currentUser.uid !== 'guest_user';
-      if (isRealUser) {
-        await updateDoc(doc(db, 'users', currentUser.uid), { 
-          ownedKits: arrayRemove(kitId)
-        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
-      }
-      
-      return {
-        success: true,
-        code,
-        command
-      };
-    }
-    return { success: false, code: '', command: '' };
-  };
-
-  const withdrawCoins = async (amount: number) => {
-    if (state.coins >= amount && amount > 0) {
-      setState(prev => ({
-        ...prev,
-        coins: prev.coins - amount,
-      }));
-
-      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const command = `/withdraw ${state.profile.name || 'Player'} ${amount} ${code}`;
-
-      const isRealUser = currentUser && currentUser.uid !== 'guest_user';
-      if (isRealUser) {
-        const { increment } = await import('firebase/firestore');
-        await updateDoc(doc(db, 'users', currentUser.uid), { 
-          coins: increment(-amount)
-        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
-      }
-
-      return {
-        success: true,
-        code,
-        command
-      };
-    }
-    return { success: false, code: '', command: '' };
-  };
-
   return {
     state,
     currentUser,
@@ -937,8 +848,5 @@ export function useStore() {
     markRead,
     checkNameAvailability,
     subscribeToMessages,
-    adminResetAllCoins,
-    withdrawKit,
-    withdrawCoins,
   };
 }
