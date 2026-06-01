@@ -10,7 +10,7 @@
 
 import { useState } from 'react';
 import { Navbar, StoreHeader, DiscordSection } from './components/HomeViews';
-import { ShopView, WorkView, SocialView, ProfileView, ChatView, LoginView } from './components/Views';
+import { ShopView, WorkView, ProfileView, LoginView } from './components/Views';
 import { useStore } from './useStore';
 import { motion, AnimatePresence } from 'motion/react';
 import { Github, MessageSquare, Loader2 } from 'lucide-react';
@@ -106,29 +106,6 @@ export default function App() {
                 getTimeRemaining={getTimeRemaining}
                 onClaimDailyReward={claimDailyReward}
                 getDailyRewardTimeRemaining={getDailyRewardTimeRemaining}
-              />
-            )}
-            {activeTab === 'chat' && (
-              <ChatView 
-                chats={state.chats}
-                messages={state.messages}
-                onSendMessage={sendMessage}
-                onMarkRead={markRead}
-                profile={state.profile}
-                onSubscribe={subscribeToMessages}
-              />
-            )}
-            {activeTab === 'social' && (
-              <SocialView 
-                friends={state.friends} 
-                onSendRequest={sendFriendRequest}
-                onAcceptRequest={acceptFriendRequest}
-                onDeclineRequest={declineFriendRequest}
-                onShare={shareCoins} 
-                coins={state.coins} 
-                friendRequests={state.friendRequests}
-                sentRequests={state.sentRequests}
-                profile={state.profile}
               />
             )}
             {activeTab === 'profile' && (

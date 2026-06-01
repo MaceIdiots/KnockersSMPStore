@@ -19,8 +19,6 @@ export function Navbar({ activeTab, setActiveTab, coins, onLogout, user }: Navba
   const tabs = [
     { id: 'shop', icon: ShoppingBag, label: 'Store' },
     { id: 'work', icon: Pickaxe, label: 'Earn' },
-    { id: 'chat', icon: MessageCircle, label: 'Messages' },
-    { id: 'social', icon: Users, label: 'Social' },
     { id: 'profile', icon: User, label: 'Profile' },
   ];
 
