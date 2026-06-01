@@ -1,11 +1,25 @@
-<div align="center">
+# Knockers SMP Store
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A professional Minecraft SMP Armory and Economy hub.
 
-  <h1>Built with AI Studio</h2>
+## Features
+- **Kit Market**: Purchase tiered equipment from Copper to Netherite.
+- **Rank System**: Unlock permanent server ranks.
+- **Economy System**: Grind for coins with interactive mining shifts.
+- **Social Integration**: Track friends and transfer coins securely.
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+## Tech Stack
+- React 19
+- Vite
+- Tailwind CSS
+- Lucide React (Icons)
+- Framer Motion (Animations)
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Getting Started
+1. Clone the repository.
+2. Run `npm install`.
+3. Run `npm run dev` to start the development server.
+4. Run `npm run build` for production builds.
 
-</div>
+---
+© 2026 KNOCKERS SMP. NOT AN OFFICIAL MINECRAFT PRODUCT.

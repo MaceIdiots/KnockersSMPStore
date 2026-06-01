@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-smp-bg: #0a0a0a;
+  --color-smp-card: #141414;
+  --color-smp-border: #262626;
+  --color-smp-red: #ef4444;
+  --color-smp-gold: #f59e0b;
+  --color-smp-iron: #94a3b8;
+  --color-smp-diamond: #22d3ee;
+  --color-smp-netherite: #a78bfa;
+}
+
+@layer base {
+  body {
+    @apply bg-smp-bg text-gray-100 font-sans selection:bg-smp-red selection:text-white;
+  }
+}
+
+.minecraft-bg-pattern {
+  background-image: radial-gradient(#1a1414 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.glow-red {
+  box-shadow: 0 0 25px -5px rgba(239, 68, 68, 0.4);
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
+.pixel-corners {
+  clip-path: polygon(
+    0 4px, 4px 4px, 4px 0,
+    calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px,
+    100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%,
+    4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px)
+  );
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20;
+}
+
+@layer base {
+  /* Prevent scroll chaining but allow internal scroll */
+  .overscroll-contain {
+    overscroll-behavior: contain;
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.animate-shake {
+  animation: shake 0.2s ease-in-out 0s 2;
+}

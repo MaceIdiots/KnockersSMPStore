@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User progress and profile data",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "pfp": { "type": "string" },
+        "bio": { "type": "string" },
+        "coins": { "type": "number" },
+        "ownedKits": { "type": "array", "items": { "type": "string" } },
+        "ownedRoles": { "type": "array", "items": { "type": "string" } },
+        "lastWorked": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "coins", "ownedKits", "ownedRoles"]
+    },
+    "Username": {
+      "title": "Username Mapping",
+      "description": "Maps a username to a UID to enforce uniqueness",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" }
+      },
+      "required": ["uid"]
+    },
+    "Friend": {
+      "title": "Friend",
+      "description": "Friend data",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "uid": { "type": "string" },
+        "addedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "uid"]
+    },
+    "FriendRequest": {
+      "title": "Friend Request",
+      "description": "Incoming or outgoing friend request",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "uid": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "uid", "status"]
+    },
+    "ChatThread": {
+      "title": "Chat Thread",
+      "description": "A conversation between two users",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "participantNames": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastTimestamp": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants", "lastMessage", "lastTimestamp"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "A message in a chat thread",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "senderName", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "The user's core profile and progress"
+    },
+    "/usernames/{name}": {
+      "schema": "Username",
+      "description": "Public registry of usernames for uniqueness checks"
+    },
+    "/users/{userId}/friends/{friendId}": {
+      "schema": "Friend",
+      "description": "The user's friends list"
+    },
+    "/users/{userId}/receivedRequests/{requestorId}": {
+      "schema": "FriendRequest",
+      "description": "Pending incoming friend requests"
+    },
+    "/users/{userId}/sentRequests/{recipientId}": {
+      "schema": "FriendRequest",
+      "description": "Sent friend requests"
+    },
+    "/chats/{chatId}": {
+      "schema": "ChatThread",
+      "description": "Conversations list"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Individual messages in a chat"
+    }
+  }
+}

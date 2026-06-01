@@ -1,0 +1,6 @@
+{
+  "name": "Knockers SMP",
+  "description": "Official website for the Knockers SMP Minecraft server. Earn coins, buy kits/ranks, and manage friends.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

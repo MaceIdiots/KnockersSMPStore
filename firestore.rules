@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validations ---
+    function isValidUser(data) {
+      return data.get('profile', null) != null && data.profile is map
+        && data.profile.get('name', '') is string && data.profile.name.size() <= 32
+        && data.get('coins', 0) is number && data.coins >= 0
+        && data.get('ownedKits', []) is list && data.ownedKits.size() <= 50
+        && data.get('ownedRoles', []) is list && data.ownedRoles.size() <= 50;
+    }
+
+    function isValidUsername(data) {
+      return data.keys().hasAll(['uid']) && data.keys().size() == 1
+        && data.uid is string && data.uid.size() == 28;
+    }
+
+    function isValidChat(data) {
+      return data.keys().hasAll(['participants', 'lastMessage', 'lastTimestamp'])
+        && data.participants is list && data.participants.size() == 2
+        && data.lastMessage is string && data.lastMessage.size() <= 1000
+        && data.lastTimestamp is number;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['senderId', 'senderName', 'text', 'timestamp'])
+        && data.senderId == request.auth.uid
+        && data.senderName is string
+        && data.text is string && data.text.size() <= 2000
+        && data.timestamp is number;
+    }
+
+    // --- Collection Routes ---
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isSignedIn(); // Allow reading other profiles (for friends)
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming());
+      allow delete: if isOwner(userId);
+    }
+
+    // Username Uniqueness Registry
+    match /usernames/{name} {
+      allow read: if true;
+      allow create: if isSignedIn() && incoming().uid == request.auth.uid;
+      allow delete: if isSignedIn() && existing().uid == request.auth.uid;
+    }
+
+    // Friendships
+    match /users/{userId}/friends/{friendId} {
+      allow read: if isOwner(userId) || isOwner(friendId);
+      allow write: if isOwner(userId);
+    }
+
+    // Friend Requests
+    match /users/{userId}/receivedRequests/{requestorId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) || isOwner(requestorId);
+    }
+
+    match /users/{userId}/sentRequests/{recipientId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+
+    // Chat Threads
+    match /chats/{chatId} {
+      allow read: if isSignedIn() && request.auth.uid in existing().participants;
+      allow create: if isSignedIn() && request.auth.uid in incoming().participants;
+      allow update: if isSignedIn() && request.auth.uid in existing().participants;
+      
+      // Chat Messages
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants && isValidMessage(incoming());
+      }
+    }
+  }
+}
