@@ -49,7 +49,29 @@ const INITIAL_TAKEN_NAMES = new Set(['Knockbacc', 'Kuro', 'Aaravos', 'Dylan', 'W
 export function useStore() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [state, setState] = useState<UserState>(DEFAULT_STATE);
+  const [state, setState] = useState<UserState>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return { ...DEFAULT_STATE, ...parsed };
+      } catch (e) {
+        console.error('Initial state load failed', e);
+      }
+    }
+    return DEFAULT_STATE;
+  });
+
+  const stateRef = useRef(state);
+  const userRef = useRef(currentUser);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    userRef.current = currentUser;
+  }, [currentUser]);
 
   // Handle Auth State
   useEffect(() => {
@@ -62,6 +84,15 @@ export function useStore() {
         const user = await checkRedirectLogin();
         if (user) {
           console.log("Found redirect user:", user.email);
+          // Load local storage progress before setting user
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              setState(prev => ({ ...prev, ...parsed }));
+              stateRef.current = { ...stateRef.current, ...parsed };
+            } catch (e) {}
+          }
           setCurrentUser(user);
         }
       } catch (e) {
@@ -72,6 +103,17 @@ export function useStore() {
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
+        // Load guest / cached progress from localStorage so it is ready in stateRef when Firestore sync begins
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            setState(prev => ({ ...prev, ...parsed }));
+            stateRef.current = { ...stateRef.current, ...parsed };
+          } catch (e) {
+            console.error('Local state load failed on login', e);
+          }
+        }
         setCurrentUser(user);
         localStorage.removeItem('smp_guest_user');
       } else {
@@ -88,6 +130,7 @@ export function useStore() {
             try {
               const parsed = JSON.parse(saved);
               setState(prev => ({ ...prev, ...parsed }));
+              stateRef.current = { ...stateRef.current, ...parsed };
             } catch (e) {
               console.error('Local state load failed', e);
             }
@@ -100,6 +143,7 @@ export function useStore() {
             try {
               const parsed = JSON.parse(saved);
               setState(prev => ({ ...prev, ...parsed }));
+              stateRef.current = { ...stateRef.current, ...parsed };
             } catch (e) {
               console.error('Local state load failed', e);
             }
@@ -276,17 +320,6 @@ export function useStore() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
   }, [state, loading]);
-
-  const stateRef = useRef(state);
-  const userRef = useRef(currentUser);
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  useEffect(() => {
-    userRef.current = currentUser;
-  }, [currentUser]);
 
   const login = async () => {
     await loginWithGoogle();
