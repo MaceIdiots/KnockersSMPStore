@@ -335,12 +335,16 @@ export function useStore() {
   };
 
   const logout = async () => {
+    const wasGuest = currentUser && currentUser.uid === 'guest_user';
     localStorage.removeItem('smp_guest_user');
     if (currentUser && currentUser.uid !== 'guest_user') {
       await signOut(auth);
     }
     setCurrentUser(null);
-    setState(DEFAULT_STATE);
+    if (!wasGuest) {
+      setState(DEFAULT_STATE);
+      localStorage.removeItem(STORAGE_KEY);
+    }
   };
 
   const updateProfile = async (profileUpdate: Partial<UserProfile>) => {
