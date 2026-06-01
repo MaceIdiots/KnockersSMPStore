@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { UserState, UserProfile, FriendRequest } from './types';
 import { auth, db, loginWithGoogle, OperationType, handleFirestoreError } from './lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
@@ -258,12 +258,122 @@ export function useStore() {
     };
   }, [currentUser]);
 
-  // Sync state to local storage (for guests)
+  // Sync state to local storage (for guests and backup cache for logged in users)
   useEffect(() => {
-    if (!loading && (!currentUser || currentUser.uid === 'guest_user')) {
+    if (!loading) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     }
-  }, [state, currentUser, loading]);
+  }, [state, loading]);
+
+  const stateRef = useRef(state);
+  const userRef = useRef(currentUser);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    userRef.current = currentUser;
+  }, [currentUser]);
+
+  // Poll / check for backup from Discord on startup or after logins
+  useEffect(() => {
+    if (!currentUser || loading) return;
+
+    const checkAndApplyBackup = async () => {
+      try {
+        const res = await fetch(`/api/check-backup?uid=${encodeURIComponent(currentUser.uid)}`);
+        const data = await res.json();
+        if (data.status === 'ok' && data.found && data.backup) {
+          console.log("RESTORE-SAVE: Found progress backup from Discord ✅", data.backup);
+          const { coins, ownedKits, ownedRoles } = data.backup;
+          
+          setState(prev => {
+            const finalCoins = Math.max(prev.coins, coins);
+            const finalKits = Array.from(new Set([...prev.ownedKits, ...ownedKits]));
+            const finalRoles = Array.from(new Set([...prev.ownedRoles, ...ownedRoles]));
+            
+            // If logged in (not guest), write to Firestore as the authenticated user
+            if (currentUser.uid !== 'guest_user') {
+              const userDoc = doc(db, 'users', currentUser.uid);
+              updateDoc(userDoc, {
+                coins: finalCoins,
+                ownedKits: finalKits,
+                ownedRoles: finalRoles,
+              }).catch(console.error);
+            }
+            
+            return {
+              ...prev,
+              coins: finalCoins,
+              ownedKits: finalKits,
+              ownedRoles: finalRoles,
+            };
+          });
+
+          // Clear backup so it isn't repeatedly applied
+          await fetch(`/api/clear-backup?uid=${encodeURIComponent(currentUser.uid)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ uid: currentUser.uid })
+          });
+        }
+      } catch (e) {
+        console.error("RESTORE-SAVE: Error checking backup:", e);
+      }
+    };
+
+    checkAndApplyBackup();
+    const interval = setInterval(checkAndApplyBackup, 8000);
+    return () => clearInterval(interval);
+  }, [currentUser, loading]);
+
+  // Handle Save Progress on Leaving / Unloading Tab (triggers Discord embeds in red)
+  useEffect(() => {
+    let unloadTriggered = false;
+
+    const handleUnloadAndSave = () => {
+      if (unloadTriggered) return;
+      unloadTriggered = true;
+
+      const currentState = stateRef.current;
+      const user = userRef.current;
+      
+      const payload = {
+        playerName: currentState.profile.name,
+        coins: currentState.coins,
+        ownedKits: currentState.ownedKits,
+        ownedRoles: currentState.ownedRoles,
+        uid: user ? user.uid : 'guest_user'
+      };
+
+      // Use keepalive: true to ensure the browser successfully dispatches this off-tab request
+      fetch('/api/save-progress-webhook', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload),
+        keepalive: true
+      }).catch(err => console.error('Failed to trigger unload save webhook:', err));
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        handleUnloadAndSave();
+      } else if (document.visibilityState === 'visible') {
+        unloadTriggered = false;
+      }
+    };
+
+    window.addEventListener('beforeunload', handleUnloadAndSave);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleUnloadAndSave);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const login = async () => {
     await loginWithGoogle();
