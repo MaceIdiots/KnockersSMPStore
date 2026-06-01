@@ -30,7 +30,7 @@ const DEFAULT_STATE: UserState = {
     pfp: 'https://mc-heads.net/avatar/Steve',
     bio: 'Survivalist in Knockers SMP. Grinding for Netherite.',
   },
-  coins: 100000,
+  coins: 0,
   ownedKits: [],
   ownedRoles: [],
   friends: [],
@@ -51,12 +51,19 @@ export function useStore() {
 
   // Handle Auth State
   useEffect(() => {
+    let fired = false;
     const initAuth = async () => {
-      // Check if we just returned from a redirect
-      const { checkRedirectLogin } = await import('./lib/firebase');
-      const redirectUser = await checkRedirectLogin();
-      if (redirectUser) {
-        setCurrentUser(redirectUser);
+      if (fired) return;
+      fired = true;
+      try {
+        const { checkRedirectLogin } = await import('./lib/firebase');
+        const user = await checkRedirectLogin();
+        if (user) {
+          console.log("Found redirect user:", user.email);
+          setCurrentUser(user);
+        }
+      } catch (e) {
+        console.error("Redirect check failed:", e);
       }
     };
     initAuth();
@@ -69,25 +76,15 @@ export function useStore() {
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            // Ensure at least 100k even in local storage for this demo as requested
-            if (typeof parsed.coins === 'number' && parsed.coins < 100000) {
-              parsed.coins = 100000;
-            }
-            // If they are at 5000, force it to 100000
-            if (parsed.coins === 5000) {
-              console.log("Found 5000 coins in local storage, overwriting with 100000 as requested.");
-              parsed.coins = 100000;
-            }
-            setState(prev => ({ ...prev, ...parsed, coins: Math.max(parsed.coins, 100000) }));
+            setState(prev => ({ ...prev, ...parsed }));
           } catch (e) {
             console.error('Local state load failed', e);
           }
         } else {
-          // If no saved state, start with default
           setState(DEFAULT_STATE);
         }
-        setLoading(false);
       }
+      setLoading(false);
     });
     return unsubscribe;
   }, []);
@@ -96,7 +93,6 @@ export function useStore() {
   useEffect(() => {
     if (!currentUser) return;
 
-    setLoading(true);
     const userDoc = doc(db, 'users', currentUser.uid);
 
     // Profile listener
@@ -105,16 +101,10 @@ export function useStore() {
         const data = snapshot.data();
         const firestoreCoins = data.coins ?? 0;
         
-        // Trial balance check: ensure user has at least 100k for demo purposes as requested
-        if (firestoreCoins < 100000) {
-          console.log(`FORCING BALANCE: User only had ${firestoreCoins}. Auto-top up to 100,000 for demo.`);
-          updateDoc(userDoc, { coins: 100000 }).catch(console.error);
-        }
-
         setState(prev => ({
           ...prev,
           profile: data.profile || prev.profile,
-          coins: Math.max(firestoreCoins, 100000),
+          coins: firestoreCoins,
           ownedKits: data.ownedKits || prev.ownedKits,
           ownedRoles: data.ownedRoles || prev.ownedRoles,
           lastWorked: data.lastWorked || prev.lastWorked,
@@ -125,10 +115,10 @@ export function useStore() {
         // Create initial profile if it doesn't exist
         const initialProfile = {
           profile: state.profile,
-          coins: state.coins,
-          ownedKits: state.ownedKits,
-          ownedRoles: state.ownedRoles,
-          lastWorked: state.lastWorked,
+          coins: 0, // Force 0 on creation as requested
+          ownedKits: [],
+          ownedRoles: [],
+          lastWorked: null,
           createdAt: serverTimestamp(),
           friends: [],
           sentRequests: []
@@ -174,30 +164,6 @@ export function useStore() {
         ...prev,
         chats: formattedChats
       }));
-
-      // For each chat, listen to messages
-      snapshot.docs.forEach(chatDoc => {
-        const messagesQuery = query(collection(db, 'chats', chatDoc.id, 'messages'), where('timestamp', '>', 0));
-        onSnapshot(messagesQuery, (msgSnapshot) => {
-          const chatMessages = msgSnapshot.docs.map(m => ({
-            id: m.id,
-            ...m.data()
-          })).sort((a: any, b: any) => a.timestamp - b.timestamp);
-          
-          setState(prev => ({
-            ...prev,
-            messages: {
-              ...prev.messages,
-              [chatDoc.id]: chatMessages.map((m: any) => ({
-                id: m.id,
-                sender: m.senderName,
-                text: m.text,
-                timestamp: m.timestamp
-              }))
-            }
-          }));
-        });
-      });
     });
 
     return () => {
@@ -506,6 +472,7 @@ export function useStore() {
       }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'chats'));
     }
 
+    // Mark current chat unread: false
     setState(prev => ({
       ...prev,
       messages: {
@@ -518,6 +485,31 @@ export function useStore() {
           : chat
       )
     }));
+  };
+
+  const subscribeToMessages = (threadId: string) => {
+    if (!currentUser || !threadId) return () => {};
+    
+    const messagesQuery = query(collection(db, 'chats', threadId, 'messages'), where('timestamp', '>', 0));
+    return onSnapshot(messagesQuery, (msgSnapshot) => {
+      const chatMessages = msgSnapshot.docs.map(m => ({
+        id: m.id,
+        ...m.data()
+      })).sort((a: any, b: any) => a.timestamp - b.timestamp);
+      
+      setState(prev => ({
+        ...prev,
+        messages: {
+          ...prev.messages,
+          [threadId]: chatMessages.map((m: any) => ({
+            id: m.id,
+            sender: m.senderName,
+            text: m.text,
+            timestamp: m.timestamp
+          }))
+        }
+      }));
+    });
   };
 
   const markRead = (threadId: string) => {
@@ -589,5 +581,6 @@ export function useStore() {
     sendMessage,
     markRead,
     checkNameAvailability,
+    subscribeToMessages,
   };
 }

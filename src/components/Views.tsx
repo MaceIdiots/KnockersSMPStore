@@ -30,6 +30,7 @@ interface ViewProps {
   messages: Record<string, ChatMessage[]>;
   onSendMessage: (threadId: string, text: string) => void;
   onMarkRead: (threadId: string) => void;
+  onSubscribe?: (threadId: string) => () => void;
   onCheckName: (name: string) => Promise<boolean>;
   onLogin?: () => void;
 }
@@ -939,20 +940,6 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
             </p>
           </div>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-            <div className="relative flex justify-center text-[10px] uppercase font-bold"><span className="bg-smp-card px-2 text-gray-700">Alternative Connect</span></div>
-          </div>
-
-          <button 
-            type="button"
-            onClick={handleRedirectLogin}
-            disabled={loading}
-            className="w-full py-3 bg-transparent border border-white/10 text-gray-400 hover:text-white hover:border-white/30 pixel-corners transition-all text-xs font-bold uppercase tracking-widest"
-          >
-            {loading ? 'REDIRECTING...' : 'Use Direct Page Login'}
-          </button>
-          
           {error && (
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
@@ -965,6 +952,18 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
               </div>
             </motion.div>
           )}
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
+            <div className="relative flex justify-center text-[10px] uppercase font-bold"><span className="bg-smp-card px-2 text-gray-700">Troubleshooting</span></div>
+          </div>
+
+          <div className="p-4 bg-white/5 border border-white/10 pixel-corners text-left space-y-2">
+            <p className="text-[10px] text-gray-400 leading-relaxed">
+              <span className="text-smp-red font-bold">REQUIRED:</span> You must add <code className="text-white bg-black/50 px-1">knockers-smp-store.vercel.app</code> to 
+              <span className="text-white font-bold"> Firebase Console &gt; Authentication &gt; Settings &gt; Authorized Domains</span> for login to work properly.
+            </p>
+          </div>
 
           <p className="text-[10px] text-gray-600 uppercase font-bold tracking-widest leading-relaxed">
             By logging in, you agree to our server rules and synchronization terms.
@@ -983,10 +982,17 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
   );
 }
 
-export function ChatView({ chats, messages, onSendMessage, onMarkRead, profile }: Pick<ViewProps, 'chats' | 'messages' | 'onSendMessage' | 'onMarkRead' | 'profile'>) {
+export function ChatView({ chats, messages, onSendMessage, onMarkRead, profile, onSubscribe }: Pick<ViewProps, 'chats' | 'messages' | 'onSendMessage' | 'onMarkRead' | 'profile' | 'onSubscribe'>) {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (activeThreadId && onSubscribe) {
+      const unsubscribe = onSubscribe(activeThreadId);
+      return () => unsubscribe();
+    }
+  }, [activeThreadId, onSubscribe]);
 
   const activeThread = chats.find(c => c.id === activeThreadId);
   const threadMessages = activeThreadId ? messages[activeThreadId] || [] : [];

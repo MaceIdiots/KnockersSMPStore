@@ -35,7 +35,8 @@ export default function App() {
     declineFriendRequest,
     sendMessage,
     markRead,
-    checkNameAvailability
+    checkNameAvailability,
+    subscribeToMessages
   } = useStore();
 
   if (loading) {
@@ -102,6 +103,7 @@ export default function App() {
                 onSendMessage={sendMessage}
                 onMarkRead={markRead}
                 profile={state.profile}
+                onSubscribe={subscribeToMessages}
               />
             )}
             {activeTab === 'social' && (
