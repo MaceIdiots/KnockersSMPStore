@@ -119,10 +119,33 @@ export function useStore() {
         const firestoreCoins = data.coins ?? 0;
         const currentResetVersion = data.resetVersion ?? 0;
         
+        let needsUpdate = false;
+        const updates: any = {};
+
+        // If old version detected, upgrade coins to 100,000 instead of 0
         if (currentResetVersion < 3 && currentUser) {
-          console.log("OLD VERSION DETECTED: Resetting coins to 0 as requested.");
-          updateDoc(userDoc, { coins: 0, resetVersion: 3 }).catch(console.error);
-          return; // Wait for next snapshot
+          console.log("OLD VERSION DETECTED: Setting migration/starting coins to 100,000.");
+          updates.coins = 100000;
+          updates.resetVersion = 3;
+          needsUpdate = true;
+        }
+
+        // Keep / merge guest-purchased progress after login
+        const guestKits = state.ownedKits.filter(id => !data.ownedKits?.includes(id));
+        const guestRoles = state.ownedRoles.filter(id => !data.ownedRoles?.includes(id));
+        
+        if (guestKits.length > 0) {
+          updates.ownedKits = arrayUnion(...guestKits);
+          needsUpdate = true;
+        }
+        if (guestRoles.length > 0) {
+          updates.ownedRoles = arrayUnion(...guestRoles);
+          needsUpdate = true;
+        }
+
+        if (needsUpdate && currentUser) {
+          updateDoc(userDoc, updates).catch(console.error);
+          return; // Wait for the next snapshots to apply state changes to UI
         }
 
         setState(prev => ({
@@ -138,14 +161,14 @@ export function useStore() {
           sentRequests: data.sentRequests || prev.sentRequests,
         }));
       } else {
-        // Create initial profile if it doesn't exist
+        // Create initial profile if it doesn't exist, retaining any stats accumulated as guest
         const initialProfile = {
           profile: state.profile,
-          coins: 100000, // Starting coins of 100k
-          ownedKits: [],
-          ownedRoles: [],
-          lastWorked: null,
-          lastDailyReward: null,
+          coins: state.coins || 100000,
+          ownedKits: state.ownedKits || [],
+          ownedRoles: state.ownedRoles || [],
+          lastWorked: state.lastWorked || null,
+          lastDailyReward: state.lastDailyReward || null,
           resetVersion: 3,
           createdAt: serverTimestamp(),
           friends: [],
@@ -253,7 +276,7 @@ export function useStore() {
     const newProfile = { ...state.profile, ...profileUpdate };
     setState(prev => ({ ...prev, profile: newProfile }));
 
-    if (currentUser) {
+    if (currentUser && currentUser.uid !== 'guest_user') {
       try {
         const userDoc = doc(db, 'users', currentUser.uid);
         await updateDoc(userDoc, { profile: newProfile });
@@ -276,7 +299,7 @@ export function useStore() {
 
   const addCoins = async (amount: number) => {
     setState(prev => ({ ...prev, coins: prev.coins + amount }));
-    if (currentUser) {
+    if (currentUser && currentUser.uid !== 'guest_user') {
       const { increment } = await import('firebase/firestore');
       await updateDoc(doc(db, 'users', currentUser.uid), { 
         coins: increment(amount) 
@@ -295,7 +318,7 @@ export function useStore() {
       // Notify Discord
       notifyPurchase([kitId], price);
 
-      if (currentUser) {
+      if (currentUser && currentUser.uid !== 'guest_user') {
         const { increment } = await import('firebase/firestore');
         await updateDoc(doc(db, 'users', currentUser.uid), { 
           coins: increment(-price),
@@ -318,7 +341,7 @@ export function useStore() {
       // Notify Discord
       notifyPurchase([roleId], price);
 
-      if (currentUser) {
+      if (currentUser && currentUser.uid !== 'guest_user') {
         const { increment } = await import('firebase/firestore');
         await updateDoc(doc(db, 'users', currentUser.uid), { 
           coins: increment(-price),
@@ -339,7 +362,7 @@ export function useStore() {
         ownedKits: prev.ownedKits.filter(id => id !== kitId),
       }));
 
-      if (currentUser) {
+      if (currentUser && currentUser.uid !== 'guest_user') {
         const { increment } = await import('firebase/firestore');
         await updateDoc(doc(db, 'users', currentUser.uid), { 
           coins: increment(sellPrice),
@@ -360,7 +383,7 @@ export function useStore() {
         ownedRoles: prev.ownedRoles.filter(id => id !== roleId),
       }));
 
-      if (currentUser) {
+      if (currentUser && currentUser.uid !== 'guest_user') {
         const { increment } = await import('firebase/firestore');
         await updateDoc(doc(db, 'users', currentUser.uid), { 
           coins: increment(sellPrice),
@@ -506,7 +529,7 @@ export function useStore() {
       const newCoins = state.coins - amount;
       setState(prev => ({ ...prev, coins: newCoins }));
 
-      if (currentUser) {
+      if (currentUser && currentUser.uid !== 'guest_user') {
         try {
           // Update sender
           const { increment } = await import('firebase/firestore');
@@ -556,7 +579,7 @@ export function useStore() {
         lastWorked: now,
       }));
 
-      if (currentUser) {
+      if (currentUser && currentUser.uid !== 'guest_user') {
         const { increment } = await import('firebase/firestore');
         await updateDoc(doc(db, 'users', currentUser.uid), {
           coins: increment(reward),
@@ -580,7 +603,7 @@ export function useStore() {
         lastDailyReward: now,
       }));
 
-      if (currentUser) {
+      if (currentUser && currentUser.uid !== 'guest_user') {
         const { increment } = await import('firebase/firestore');
         await updateDoc(doc(db, 'users', currentUser.uid), {
           coins: increment(reward),
@@ -610,7 +633,7 @@ export function useStore() {
       timestamp: now,
     };
 
-    if (currentUser) {
+    if (currentUser && currentUser.uid !== 'guest_user') {
       const messageRef = collection(db, 'chats', threadId, 'messages');
       await addDoc(messageRef, {
         senderId: currentUser.uid,
