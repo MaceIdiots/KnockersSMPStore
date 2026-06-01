@@ -1,12 +1,79 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useState, useEffect } from 'react';
+import { UserState, UserProfile, FriendRequest } from './types';
+import { auth, db, loginWithGoogle, OperationType, handleFirestoreError } from './lib/firebase';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  onSnapshot, 
+  collection, 
+  query, 
+  where, 
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove,
+  addDoc
+} from 'firebase/firestore';
+
+const STORAGE_KEY = 'knockers_smp_user_state';
+
+const DEFAULT_STATE: UserState = {
+  profile: {
+    name: 'Steve',
+    pfp: 'https://mc-heads.net/avatar/Steve',
+    bio: 'Survivalist in Knockers SMP. Grinding for Netherite.',
+  },
+  coins: 0,
+  ownedKits: [],
+  ownedRoles: [],
+  friends: [],
+  friendRequests: [],
+  sentRequests: [],
+  chats: [],
+  messages: {},
+  lastWorked: null,
+  lastDailyReward: null,
+  resetVersion: 2, // Current version
+};
+
+// Initial list of "canonical" names in the SMP to simulate "taken" names
+const INITIAL_TAKEN_NAMES = new Set(['Knockbacc', 'Kuro', 'Aaravos', 'Dylan', 'Welcomer', 'Chosekon', 'Gubbylan']);
+
 export function useStore() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [state, setState] = useState<UserState>(DEFAULT_STATE);
 
+  // Handle Auth State
   useEffect(() => {
+    let fired = false;
+    const initAuth = async () => {
+      if (fired) return;
+      fired = true;
+      try {
+        const { checkRedirectLogin } = await import('./lib/firebase');
+        const user = await checkRedirectLogin();
+        if (user) {
+          console.log("Found redirect user:", user.email);
+          setCurrentUser(user);
+        }
+      } catch (e) {
+        console.error("Redirect check failed:", e);
+      }
+    };
+    initAuth();
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (!user) {
+        // Load from local storage if not logged in
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
           try {
@@ -18,58 +85,127 @@ export function useStore() {
         } else {
           setState(DEFAULT_STATE);
         }
-        setLoading(false);
       }
+      setLoading(false);
     });
     return unsubscribe;
   }, []);
 
+  // Sync with Firestore if logged in
   useEffect(() => {
     if (!currentUser) return;
+
     const userDoc = doc(db, 'users', currentUser.uid);
+
+    // Profile listener
     const unsubscribeProfile = onSnapshot(userDoc, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
+        const firestoreCoins = data.coins ?? 0;
+        const currentResetVersion = data.resetVersion ?? 0;
+        
+        if (currentResetVersion < 2 && currentUser) {
+          console.log("OLD VERSION DETECTED: Resetting coins to 0 as requested.");
+          updateDoc(userDoc, { coins: 0, resetVersion: 2 }).catch(console.error);
+          return; // Wait for next snapshot
+        }
+
         setState(prev => ({
           ...prev,
           profile: data.profile || prev.profile,
-          coins: data.coins ?? 0,
+          coins: firestoreCoins,
           ownedKits: data.ownedKits || prev.ownedKits,
           ownedRoles: data.ownedRoles || prev.ownedRoles,
           lastWorked: data.lastWorked || prev.lastWorked,
+          lastDailyReward: data.lastDailyReward || prev.lastDailyReward,
+          resetVersion: currentResetVersion,
           friends: data.friends || prev.friends,
           sentRequests: data.sentRequests || prev.sentRequests,
         }));
-        setLoading(false);
       } else {
+        // Create initial profile if it doesn't exist
         const initialProfile = {
           profile: state.profile,
-          coins: 0,
+          coins: 0, // Force 0 on creation as requested
           ownedKits: [],
           ownedRoles: [],
           lastWorked: null,
+          lastDailyReward: null,
+          resetVersion: 2,
           createdAt: serverTimestamp(),
           friends: [],
           sentRequests: []
         };
+        // Register username and create profile
         const registerUsername = async () => {
           const nameDoc = doc(db, 'usernames', state.profile.name.toLowerCase());
           await setDoc(nameDoc, { uid: currentUser.uid });
           await setDoc(userDoc, initialProfile);
         };
-        registerUsername()
-          .then(() => setLoading(false))
-          .catch(e => {
-            handleFirestoreError(e, OperationType.CREATE, `users/${currentUser.uid}`);
-            setLoading(false);
-          });
+        
+        registerUsername().catch(e => handleFirestoreError(e, OperationType.CREATE, `users/${currentUser.uid}`));
       }
+      setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
       setLoading(false);
     });
-    return () => unsubscribeProfile();
+
+    // Chat threads listener
+    const chatsQuery = query(collection(db, 'chats'), where('participants', 'array-contains', currentUser.uid));
+    const unsubscribeChats = onSnapshot(chatsQuery, (snapshot) => {
+      const chatThreads = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as any[];
+
+      // Map to internal UI format
+      const formattedChats = chatThreads.map(chat => {
+        const otherIndex = chat.participants.indexOf(currentUser.uid) === 0 ? 1 : 0;
+        const otherName = chat.participantNames ? chat.participantNames[otherIndex] : 'Unknown';
+        return {
+          id: chat.id,
+          participantName: otherName,
+          lastMessage: chat.lastMessage,
+          lastTimestamp: chat.lastTimestamp,
+          status: 'online', // Simulated status
+          unread: false // Simplified for now
+        };
+      });
+
+      setState(prev => ({
+        ...prev,
+        chats: formattedChats
+      }));
+    });
+
+    // receivedRequests listener
+    const receivedRequestsCol = collection(db, 'users', currentUser.uid, 'receivedRequests');
+    const unsubscribeRequests = onSnapshot(receivedRequestsCol, (snapshot) => {
+      const requests = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          fromName: data.name || 'Unknown',
+          status: data.status || 'pending'
+        };
+      }) as FriendRequest[];
+
+      setState(prev => ({
+        ...prev,
+        friendRequests: requests
+      }));
+    }, (error) => {
+      console.error("Failed to fetch friend requests: ", error);
+    });
+
+    return () => {
+      unsubscribeProfile();
+      unsubscribeChats();
+      unsubscribeRequests();
+    };
   }, [currentUser]);
+
+  // Sync state to local storage (for guests)
   useEffect(() => {
     if (!currentUser) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -94,11 +230,13 @@ export function useStore() {
         const userDoc = doc(db, 'users', currentUser.uid);
         await updateDoc(userDoc, { profile: newProfile });
         
+        // Also update usernames registry if name changed
         if (profileUpdate.name && profileUpdate.name !== state.profile.name) {
           const oldNameDoc = doc(db, 'usernames', state.profile.name.toLowerCase());
           const newNameDoc = doc(db, 'usernames', profileUpdate.name.toLowerCase());
           
           await setDoc(newNameDoc, { uid: currentUser.uid });
+          // Delete old username registry
           const { deleteDoc } = await import('firebase/firestore');
           await deleteDoc(oldNameDoc).catch(console.error);
         }
@@ -126,6 +264,9 @@ export function useStore() {
         ownedKits: [...prev.ownedKits, kitId],
       }));
 
+      // Notify Discord
+      notifyPurchase([kitId], price);
+
       if (currentUser) {
         const { increment } = await import('firebase/firestore');
         await updateDoc(doc(db, 'users', currentUser.uid), { 
@@ -137,6 +278,7 @@ export function useStore() {
     }
     return false;
   };
+
   const buyRole = async (roleId: string, price: number) => {
     if (state.coins >= price && !state.ownedRoles.includes(roleId)) {
       setState(prev => ({
@@ -144,6 +286,9 @@ export function useStore() {
         coins: prev.coins - price,
         ownedRoles: [...prev.ownedRoles, roleId],
       }));
+
+      // Notify Discord
+      notifyPurchase([roleId], price);
 
       if (currentUser) {
         const { increment } = await import('firebase/firestore');
@@ -157,19 +302,64 @@ export function useStore() {
     return false;
   };
 
+  const sellKit = async (kitId: string, price: number) => {
+    if (state.ownedKits.includes(kitId)) {
+      const sellPrice = Math.floor(price * 0.5); // 50% back
+      setState(prev => ({
+        ...prev,
+        coins: prev.coins + sellPrice,
+        ownedKits: prev.ownedKits.filter(id => id !== kitId),
+      }));
+
+      if (currentUser) {
+        const { increment } = await import('firebase/firestore');
+        await updateDoc(doc(db, 'users', currentUser.uid), { 
+          coins: increment(sellPrice),
+          ownedKits: arrayRemove(kitId)
+        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const sellRole = async (roleId: string, price: number) => {
+    if (state.ownedRoles.includes(roleId)) {
+      const sellPrice = Math.floor(price * 0.5); // 50% back
+      setState(prev => ({
+        ...prev,
+        coins: prev.coins + sellPrice,
+        ownedRoles: prev.ownedRoles.filter(id => id !== roleId),
+      }));
+
+      if (currentUser) {
+        const { increment } = await import('firebase/firestore');
+        await updateDoc(doc(db, 'users', currentUser.uid), { 
+          coins: increment(sellPrice),
+          ownedRoles: arrayRemove(roleId)
+        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+      }
+      return true;
+    }
+    return false;
+  };
+
   const sendFriendRequest = async (name: string) => {
     if (!name || name === state.profile.name) return false;
     
+    // Check in Firestore usernames registry first
     const usernameDoc = await getDoc(doc(db, 'usernames', name.toLowerCase()));
     let recipientUid: string | null = null;
     
     if (usernameDoc.exists()) {
       recipientUid = usernameDoc.data().uid;
     } else {
+       // Fallback to initial registry for demo purposes
       const existsInInitial = Array.from(INITIAL_TAKEN_NAMES).some(
         taken => taken.toLowerCase() === name.trim().toLowerCase()
       );
       if (!existsInInitial) return 'unavailable';
+      // In a real app we'd need their UID. Since it's a demo fallback, we simulate success.
       recipientUid = 'demo-uid-' + name;
     }
     
@@ -182,6 +372,7 @@ export function useStore() {
     }));
 
     if (currentUser && recipientUid) {
+      // Add to recipient's received requests
       const recipientReceivedRef = doc(db, 'users', recipientUid, 'receivedRequests', currentUser.uid);
       await setDoc(recipientReceivedRef, {
         name: state.profile.name,
@@ -190,6 +381,7 @@ export function useStore() {
         createdAt: serverTimestamp()
       }).catch(e => handleFirestoreError(e, OperationType.CREATE, 'receivedRequests'));
 
+      // Add to sender's sent requests
       await updateDoc(doc(db, 'users', currentUser.uid), {
         sentRequests: arrayUnion(name)
       }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
@@ -197,7 +389,9 @@ export function useStore() {
 
     return true;
   };
+
   const acceptFriendRequest = async (fromName: string) => {
+    // Find recipient UID for the friend
     const usernameDoc = await getDoc(doc(db, 'usernames', fromName.toLowerCase()));
     let fromUid = '';
     if (usernameDoc.exists()) {
@@ -205,6 +399,7 @@ export function useStore() {
     }
 
     if (currentUser && fromUid) {
+      // Create chat thread in Firestore
       const threadId = [currentUser.uid, fromUid].sort().join('_');
       const chatRef = doc(db, 'chats', threadId);
       
@@ -216,9 +411,25 @@ export function useStore() {
         updatedAt: serverTimestamp()
       }).catch(e => handleFirestoreError(e, OperationType.CREATE, 'chats'));
 
+      // Update current user's entry (add friend, remove from sentRequests)
       await updateDoc(doc(db, 'users', currentUser.uid), {
-        friends: arrayUnion(fromName)
+        friends: arrayUnion(fromName),
+        sentRequests: arrayRemove(fromName)
       }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+
+      // Update friend's entry (add friend, remove from sentRequests)
+      await updateDoc(doc(db, 'users', fromUid), {
+        friends: arrayUnion(state.profile.name),
+        sentRequests: arrayRemove(state.profile.name)
+      }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+
+      // Delete the received friend request document on both sides to stay completely clean
+      const { deleteDoc } = await import('firebase/firestore');
+      const receivedReqDoc = doc(db, 'users', currentUser.uid, 'receivedRequests', fromUid);
+      await deleteDoc(receivedReqDoc).catch(console.error);
+
+      const senderReceivedReqDoc = doc(db, 'users', fromUid, 'receivedRequests', currentUser.uid);
+      await deleteDoc(senderReceivedReqDoc).catch(console.error);
     }
 
     setState(prev => {
@@ -235,7 +446,7 @@ export function useStore() {
       return {
         ...prev,
         friends: [...prev.friends, fromName],
-        friendRequests: prev.friendRequests.filter((r: any) => r.fromName !== fromName),
+        friendRequests: prev.friendRequests.filter(r => r.fromName !== fromName),
         chats: [newChat, ...prev.chats],
         messages: {
           ...prev.messages,
@@ -248,9 +459,20 @@ export function useStore() {
   const declineFriendRequest = async (fromName: string) => {
     setState(prev => ({
       ...prev,
-      friendRequests: prev.friendRequests.filter((r: any) => r.fromName !== fromName)
+      friendRequests: prev.friendRequests.filter(r => r.fromName !== fromName)
     }));
+
+    if (currentUser) {
+      const usernameDoc = await getDoc(doc(db, 'usernames', fromName.toLowerCase()));
+      if (usernameDoc.exists()) {
+        const fromUid = usernameDoc.data().uid;
+        const { deleteDoc } = await import('firebase/firestore');
+        const receivedReqDoc = doc(db, 'users', currentUser.uid, 'receivedRequests', fromUid);
+        await deleteDoc(receivedReqDoc).catch(console.error);
+      }
+    }
   };
+
   const shareCoins = async (friendName: string, amount: number) => {
     if (state.coins >= amount && amount > 0) {
       const newCoins = state.coins - amount;
@@ -258,11 +480,13 @@ export function useStore() {
 
       if (currentUser) {
         try {
+          // Update sender
           const { increment } = await import('firebase/firestore');
           await updateDoc(doc(db, 'users', currentUser.uid), {
             coins: increment(-amount)
           });
 
+          // Find recipient UID
           const usernameDoc = await getDoc(doc(db, 'usernames', friendName.toLowerCase()));
           if (usernameDoc.exists()) {
             const recipientUid = usernameDoc.data().uid;
@@ -293,6 +517,7 @@ export function useStore() {
     const remaining = cooldown - (now - state.lastWorked);
     return Math.max(0, remaining);
   };
+
   const work = async () => {
     if (canWork()) {
       const reward = Math.floor(Math.random() * 2000) + 1500;
@@ -315,6 +540,38 @@ export function useStore() {
     return 0;
   };
 
+  const claimDailyReward = async () => {
+    const now = Date.now();
+    const cooldown = 24 * 60 * 60 * 1000;
+    
+    if (!state.lastDailyReward || now - state.lastDailyReward > cooldown) {
+      const reward = 1000; // Small fixed reward
+      setState(prev => ({
+        ...prev,
+        coins: prev.coins + reward,
+        lastDailyReward: now,
+      }));
+
+      if (currentUser) {
+        const { increment } = await import('firebase/firestore');
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          coins: increment(reward),
+          lastDailyReward: now
+        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+      }
+      return reward;
+    }
+    return 0;
+  };
+
+  const getDailyRewardTimeRemaining = () => {
+    if (!state.lastDailyReward) return 0;
+    const now = Date.now();
+    const cooldown = 24 * 60 * 60 * 1000;
+    const remaining = cooldown - (now - state.lastDailyReward);
+    return Math.max(0, remaining);
+  };
+
   const sendMessage = async (threadId: string, text: string) => {
     if (!text.trim()) return;
     
@@ -335,6 +592,7 @@ export function useStore() {
         createdAt: serverTimestamp()
       }).catch(e => handleFirestoreError(e, OperationType.CREATE, 'messages'));
 
+      // Update last message in thread
       await updateDoc(doc(db, 'chats', threadId), {
         lastMessage: `You: ${text}`,
         lastTimestamp: now,
@@ -342,6 +600,7 @@ export function useStore() {
       }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'chats'));
     }
 
+    // Mark current chat unread: false
     setState(prev => ({
       ...prev,
       messages: {
@@ -355,6 +614,7 @@ export function useStore() {
       )
     }));
   };
+
   const subscribeToMessages = (threadId: string) => {
     if (!currentUser || !threadId) return () => {};
     
@@ -413,11 +673,13 @@ export function useStore() {
     if (!name) return true;
     const normalized = name.trim().toLowerCase();
     
+    // Check Firestore registry
     const nameDoc = await getDoc(doc(db, 'usernames', normalized));
     if (nameDoc.exists() && nameDoc.data().uid !== currentUser?.uid) {
       return false;
     }
 
+    // Check against initial set
     for (const taken of INITIAL_TAKEN_NAMES) {
       if (taken.toLowerCase() === normalized && name !== state.profile.name) {
         return false;
@@ -444,6 +706,10 @@ export function useStore() {
     work,
     canWork,
     getTimeRemaining,
+    claimDailyReward,
+    getDailyRewardTimeRemaining,
+    sellKit,
+    sellRole,
     sendMessage,
     markRead,
     checkNameAvailability,

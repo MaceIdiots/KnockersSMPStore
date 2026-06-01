@@ -58,6 +58,8 @@ export interface UserState {
   chats: ChatThread[];
   messages: Record<string, ChatMessage[]>;
   lastWorked: number | null;
+  lastDailyReward: number | null;
+  resetVersion: number;
 }
 
 export const KITS: Kit[] = [

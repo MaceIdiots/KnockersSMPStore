@@ -25,10 +25,14 @@ export default function App() {
     logout,
     buyKit, 
     buyRole, 
+    sellKit,
+    sellRole,
     shareCoins, 
     work, 
     canWork, 
     getTimeRemaining,
+    claimDailyReward,
+    getDailyRewardTimeRemaining,
     updateProfile,
     sendFriendRequest,
     acceptFriendRequest,
@@ -84,6 +88,8 @@ export default function App() {
                   coins={state.coins} 
                   onBuy={buyKit} 
                   onBuyRole={buyRole}
+                  onSellKit={sellKit}
+                  onSellRole={sellRole}
                   ownedKits={state.ownedKits} 
                   ownedRoles={state.ownedRoles}
                 />
@@ -94,6 +100,8 @@ export default function App() {
                 onWork={work} 
                 canWork={canWork} 
                 getTimeRemaining={getTimeRemaining}
+                onClaimDailyReward={claimDailyReward}
+                getDailyRewardTimeRemaining={getDailyRewardTimeRemaining}
               />
             )}
             {activeTab === 'chat' && (

@@ -5,18 +5,22 @@
 
 import { useState, useEffect, FormEvent, useRef, ChangeEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingCart, Check, X, Coins, Pickaxe, Hammer, Gem, LayoutGrid, Clock, Users, Send, UserPlus, ShieldCheck, User, Save, Trash2, ExternalLink, Camera, Search, Plus, Phone, Bell, MoreVertical, MessageSquarePlus, Loader2 } from 'lucide-react';
+import { ShoppingCart, Check, X, Coins, Pickaxe, Hammer, Gem, LayoutGrid, Clock, Users, Send, UserPlus, ShieldCheck, User, Save, Trash2, ExternalLink, Camera, Search, Plus, Phone, Bell, MoreVertical, MessageSquarePlus, Loader2, Gift } from 'lucide-react';
 import { KITS, ROLES, Kit, Role, UserProfile, FriendRequest, ChatThread, ChatMessage } from '../types';
 
 interface ViewProps {
   coins: number;
   onBuy: (kitId: string, price: number) => Promise<boolean>;
   onBuyRole: (roleId: string, price: number) => Promise<boolean>;
+  onSellKit: (kitId: string, price: number) => Promise<boolean>;
+  onSellRole: (roleId: string, price: number) => Promise<boolean>;
   onWork: () => Promise<number>;
   ownedKits: string[];
   ownedRoles: string[];
   canWork: () => boolean;
   getTimeRemaining: () => number;
+  onClaimDailyReward: () => Promise<number>;
+  getDailyRewardTimeRemaining: () => number;
   friends: string[];
   onShare: (name: string, amount: number) => Promise<boolean>;
   profile: UserProfile;
@@ -35,7 +39,7 @@ interface ViewProps {
   onLogin?: () => void;
 }
 
-export function ShopView({ coins, onBuy, onBuyRole, ownedKits, ownedRoles }: Pick<ViewProps, 'coins' | 'onBuy' | 'onBuyRole' | 'ownedKits' | 'ownedRoles'>) {
+export function ShopView({ coins, onBuy, onBuyRole, onSellKit, onSellRole, ownedKits, ownedRoles }: Pick<ViewProps, 'coins' | 'onBuy' | 'onBuyRole' | 'onSellKit' | 'onSellRole' | 'ownedKits' | 'ownedRoles'>) {
   const [selectedKit, setSelectedKit] = useState<Kit | null>(null);
   const [shopCategory, setShopCategory] = useState<'kits' | 'roles'>('kits');
 
@@ -139,6 +143,15 @@ export function ShopView({ coins, onBuy, onBuyRole, ownedKits, ownedRoles }: Pic
                     >
                       {ownedKits.includes(kit.id) ? 'ALREADY OWNED' : 'PURCHASE KIT'}
                     </button>
+
+                    {ownedKits.includes(kit.id) && (
+                      <button
+                        onClick={async () => await onSellKit(kit.id, kit.price)}
+                        className="w-full py-2 bg-transparent border border-white/10 text-gray-500 hover:text-smp-red hover:border-smp-red/40 transition-all text-[10px] font-bold uppercase tracking-widest pixel-corners"
+                      >
+                        Sell for {(kit.price * 0.5).toLocaleString()} coins
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -213,6 +226,15 @@ export function ShopView({ coins, onBuy, onBuyRole, ownedKits, ownedRoles }: Pic
                       <>AUTHORIZE RANK</>
                     )}
                   </button>
+
+                  {ownedRoles.includes(role.id) && (
+                    <button
+                      onClick={async () => await onSellRole(role.id, role.price)}
+                      className="w-full py-2 bg-transparent border border-white/10 text-gray-500 hover:text-smp-red hover:border-smp-red/40 transition-all text-[10px] font-bold uppercase tracking-widest pixel-corners"
+                    >
+                      Sell for {(role.price * 0.5).toLocaleString()} coins
+                    </button>
+                  )}
                 </div>
               ))}
               </div>
@@ -296,26 +318,49 @@ export function ShopView({ coins, onBuy, onBuyRole, ownedKits, ownedRoles }: Pic
   );
 }
 
-export function WorkView({ onWork, canWork, getTimeRemaining }: Pick<ViewProps, 'onWork' | 'canWork' | 'getTimeRemaining'>) {
+export function WorkView({ onWork, canWork, getTimeRemaining, onClaimDailyReward, getDailyRewardTimeRemaining }: Pick<ViewProps, 'onWork' | 'canWork' | 'getTimeRemaining' | 'onClaimDailyReward' | 'getDailyRewardTimeRemaining'>) {
   const [mining, setMining] = useState(false);
+  const [claiming, setClaiming] = useState(false);
   const [reward, setReward] = useState<number | null>(null);
+  const [dailyRewardMsg, setDailyRewardMsg] = useState<number | null>(null);
   const [remainingTime, setRemainingTime] = useState(getTimeRemaining());
+  const [dailyRemaining, setDailyRemaining] = useState(getDailyRewardTimeRemaining());
 
   useEffect(() => {
     const interval = setInterval(() => {
       setRemainingTime(getTimeRemaining());
+      setDailyRemaining(getDailyRewardTimeRemaining());
     }, 1000);
     return () => clearInterval(interval);
-  }, [getTimeRemaining]);
+  }, [getTimeRemaining, getDailyRewardTimeRemaining]);
 
-  const formatTime = (ms: number) => {
+  const formatTimeFull = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    
-    if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
+    return `${hours}h ${minutes}m ${seconds}s`;
+  };
+
+  const formatTime = (ms: number) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleClaimReward = async () => {
+    if (dailyRemaining > 0 || claiming) return;
+    setClaiming(true);
+    try {
+      const amount = await onClaimDailyReward();
+      if (amount > 0) {
+        setDailyRewardMsg(amount);
+        setTimeout(() => setDailyRewardMsg(null), 3000);
+      }
+    } finally {
+      setClaiming(false);
+    }
   };
 
   const startMining = async () => {
@@ -391,6 +436,52 @@ export function WorkView({ onWork, canWork, getTimeRemaining }: Pick<ViewProps, 
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`bg-smp-card border-2 p-6 pixel-corners flex items-center justify-between col-span-1 md:col-span-3 group transition-all ${dailyRemaining === 0 ? 'border-smp-gold shadow-[0_0_20px_rgba(234,179,8,0.2)]' : 'border-smp-border opacity-80'}`}
+        >
+          <div className="flex items-center gap-5">
+            <div className={`p-4 pixel-corners transition-transform group-hover:rotate-12 ${dailyRemaining === 0 ? 'bg-smp-gold text-black animate-bounce' : 'bg-gray-800 text-gray-500'}`}>
+              <Gift size={32} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Daily Operative Bonus</p>
+              <h4 className="text-xl font-bold uppercase tracking-tight">
+                {dailyRemaining === 0 ? 'Reward Available!' : 'Next Reward In'}
+              </h4>
+              {dailyRemaining > 0 && <p className="text-smp-gold font-mono text-sm">{formatTimeFull(dailyRemaining)}</p>}
+            </div>
+          </div>
+
+          <div className="relative">
+            <button
+              onClick={handleClaimReward}
+              disabled={dailyRemaining > 0 || claiming}
+              className={`px-8 py-4 pixel-corners font-bold transition-all relative overflow-hidden ${
+                dailyRemaining === 0 
+                  ? 'bg-smp-gold text-black hover:bg-yellow-400 active:scale-95 shadow-[0_4px_0_0_#92400e] active:shadow-none translate-y-0 active:translate-y-1' 
+                  : 'bg-gray-800 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {claiming ? 'CLAIMING...' : dailyRemaining === 0 ? 'CLAIM 1,000 COINS' : 'CLAIMED'}
+            </button>
+            
+            <AnimatePresence>
+              {dailyRewardMsg && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: -40 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute left-1/2 -translate-x-1/2 font-mono font-bold text-smp-gold text-lg whitespace-nowrap"
+                >
+                  +{dailyRewardMsg} COINS!
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+
         {[
           { icon: Hammer, color: 'text-red-400', bg: 'bg-red-400/10', label: 'Shift Reward', value: '1.5k - 3.5k Coins' },
           { icon: Clock, color: 'text-blue-400', bg: 'bg-blue-400/10', label: 'Shift Duration', value: '1 Minute Shift' },
@@ -920,7 +1011,7 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
         </div>
 
         <div className="space-y-6 relative z-10">
-          <div className="space-y-3">
+          <div className="space-y-4">
             <button 
               type="button"
               onClick={handleLogin}
@@ -932,12 +1023,22 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
               ) : (
                 <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-[10px] text-white">G</div>
               )}
-              {loading ? 'CONNECTING...' : 'CONTINUE WITH GOOGLE'}
+              {loading ? 'CONNECTING...' : 'CONNECT WITH GOOGLE'}
             </button>
             
-            <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest leading-relaxed">
-              Standard secure popup connection
-            </p>
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-[10px] text-gray-600 uppercase font-bold tracking-widest leading-relaxed">
+                Problems signing in?
+              </p>
+              <button 
+                type="button"
+                onClick={handleRedirectLogin}
+                disabled={loading}
+                className="text-[10px] text-smp-red hover:text-white font-bold uppercase underline underline-offset-4 decoration-smp-red/30 transition-colors"
+              >
+                Try Direct Redirect
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -952,18 +1053,6 @@ export function LoginView({ onLogin }: Pick<ViewProps, 'onLogin'>) {
               </div>
             </motion.div>
           )}
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-white/5"></div></div>
-            <div className="relative flex justify-center text-[10px] uppercase font-bold"><span className="bg-smp-card px-2 text-gray-700">Troubleshooting</span></div>
-          </div>
-
-          <div className="p-4 bg-white/5 border border-white/10 pixel-corners text-left space-y-2">
-            <p className="text-[10px] text-gray-400 leading-relaxed">
-              <span className="text-smp-red font-bold">REQUIRED:</span> You must add <code className="text-white bg-black/50 px-1">knockers-smp-store.vercel.app</code> to 
-              <span className="text-white font-bold"> Firebase Console &gt; Authentication &gt; Settings &gt; Authorized Domains</span> for login to work properly.
-            </p>
-          </div>
 
           <p className="text-[10px] text-gray-600 uppercase font-bold tracking-widest leading-relaxed">
             By logging in, you agree to our server rules and synchronization terms.

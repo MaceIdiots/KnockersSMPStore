@@ -60,34 +60,21 @@ service cloud.firestore {
 
     // User Profiles
     match /users/{userId} {
-      allow read: if isSignedIn(); // Allow reading other profiles (for friends)
-      allow create: if isOwner(userId) && isValidUser(incoming());
-      allow update: if isOwner(userId) && isValidUser(incoming());
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['coins', 'friends', 'sentRequests']));
       allow delete: if isOwner(userId);
+    }
+
+    // sub-collections (receivedRequests, sentRequests, etc)
+    match /users/{userId}/{collectionName}/{docId} {
+      allow read, write: if isSignedIn();
     }
 
     // Username Uniqueness Registry
     match /usernames/{name} {
       allow read: if true;
-      allow create: if isSignedIn() && incoming().uid == request.auth.uid;
-      allow delete: if isSignedIn() && existing().uid == request.auth.uid;
-    }
-
-    // Friendships
-    match /users/{userId}/friends/{friendId} {
-      allow read: if isOwner(userId) || isOwner(friendId);
-      allow write: if isOwner(userId);
-    }
-
-    // Friend Requests
-    match /users/{userId}/receivedRequests/{requestorId} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId) || isOwner(requestorId);
-    }
-
-    match /users/{userId}/sentRequests/{recipientId} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId);
+      allow write: if isSignedIn();
     }
 
     // Chat Threads
