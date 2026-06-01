@@ -140,16 +140,28 @@ export function useStore() {
           needsUpdate = true;
         }
 
-        // Keep / merge guest-purchased progress after login
-        const guestKits = state.ownedKits.filter(id => !data.ownedKits?.includes(id));
-        const guestRoles = state.ownedRoles.filter(id => !data.ownedRoles?.includes(id));
+        // Keep / merge guest-purchased progress after login safely
+        const guestCoins = stateRef.current.coins;
+        const guestKits = stateRef.current.ownedKits.filter(id => !data.ownedKits?.includes(id));
+        const guestRoles = stateRef.current.ownedRoles.filter(id => !data.ownedRoles?.includes(id));
         
+        if (guestCoins > firestoreCoins) {
+          updates.coins = guestCoins;
+          needsUpdate = true;
+        }
+
         if (guestKits.length > 0) {
           updates.ownedKits = arrayUnion(...guestKits);
           needsUpdate = true;
         }
         if (guestRoles.length > 0) {
           updates.ownedRoles = arrayUnion(...guestRoles);
+          needsUpdate = true;
+        }
+
+        // Merge guest profile config if user's Firestore is default but guest edited theirs
+        if (stateRef.current.profile.name !== 'Steve' && (!data.profile || data.profile.name === 'Steve')) {
+          updates.profile = stateRef.current.profile;
           needsUpdate = true;
         }
 
@@ -172,14 +184,14 @@ export function useStore() {
         }));
         setLoading(false);
       } else {
-        // Create initial profile if it doesn't exist, retaining any stats accumulated as guest
+        // Create initial profile if it doesn't exist, retaining any stats accumulated as guest using stateRef
         const initialProfile = {
-          profile: state.profile,
-          coins: state.coins || 0,
-          ownedKits: state.ownedKits || [],
-          ownedRoles: state.ownedRoles || [],
-          lastWorked: state.lastWorked || null,
-          lastDailyReward: state.lastDailyReward || null,
+          profile: stateRef.current.profile,
+          coins: stateRef.current.coins || 0,
+          ownedKits: stateRef.current.ownedKits || [],
+          ownedRoles: stateRef.current.ownedRoles || [],
+          lastWorked: stateRef.current.lastWorked || null,
+          lastDailyReward: stateRef.current.lastDailyReward || null,
           resetVersion: 3,
           createdAt: serverTimestamp(),
           friends: [],
@@ -187,7 +199,7 @@ export function useStore() {
         };
         // Register username and create profile
         const registerUsername = async () => {
-          const nameDoc = doc(db, 'usernames', state.profile.name.toLowerCase());
+          const nameDoc = doc(db, 'usernames', stateRef.current.profile.name.toLowerCase());
           await setDoc(nameDoc, { uid: currentUser.uid });
           await setDoc(userDoc, initialProfile);
         };
@@ -275,111 +287,6 @@ export function useStore() {
   useEffect(() => {
     userRef.current = currentUser;
   }, [currentUser]);
-
-  // Poll / check for backup from Discord on startup or after logins
-  useEffect(() => {
-    if (!currentUser || loading) return;
-
-    const checkAndApplyBackup = async () => {
-      try {
-        const res = await fetch(`${window.location.origin}/api/check-backup?uid=${encodeURIComponent(currentUser.uid)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.status === 'ok' && data.found && data.backup) {
-          console.log("RESTORE-SAVE: Found progress backup from Discord ✅", data.backup);
-          const { coins, ownedKits, ownedRoles } = data.backup;
-          
-          setState(prev => {
-            const finalCoins = Math.max(prev.coins, coins);
-            const finalKits = Array.from(new Set([...prev.ownedKits, ...ownedKits]));
-            const finalRoles = Array.from(new Set([...prev.ownedRoles, ...ownedRoles]));
-            
-            // If logged in (not guest), write to Firestore as the authenticated user
-            if (currentUser.uid !== 'guest_user') {
-              const userDoc = doc(db, 'users', currentUser.uid);
-              updateDoc(userDoc, {
-                coins: finalCoins,
-                ownedKits: finalKits,
-                ownedRoles: finalRoles,
-              }).catch(console.error);
-            }
-            
-            return {
-              ...prev,
-              coins: finalCoins,
-              ownedKits: finalKits,
-              ownedRoles: finalRoles,
-            };
-          });
-
-          // Clear backup so it isn't repeatedly applied
-          await fetch(`${window.location.origin}/api/clear-backup?uid=${encodeURIComponent(currentUser.uid)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uid: currentUser.uid })
-          }).catch(() => {});
-        }
-      } catch (e) {
-        // Suppress noisy console error of transient 'Failed to fetch' during restarts/loads
-        console.warn("RESTORE-SAVE: Progress check server was unavailable or restarting, will retrying shortly.");
-      }
-    };
-
-    checkAndApplyBackup();
-    const interval = setInterval(checkAndApplyBackup, 8000);
-    return () => clearInterval(interval);
-  }, [currentUser, loading]);
-
-  // Handle Save Progress on Leaving / Unloading Tab (triggers Discord embeds in red)
-  useEffect(() => {
-    let unloadTriggered = false;
-
-    const handleUnloadAndSave = () => {
-      if (unloadTriggered) return;
-      unloadTriggered = true;
-
-      const currentState = stateRef.current;
-      const user = userRef.current;
-      
-      const payload = {
-        origin: window.location.origin,
-        playerName: currentState.profile.name,
-        coins: currentState.coins,
-        ownedKits: currentState.ownedKits,
-        ownedRoles: currentState.ownedRoles,
-        uid: user ? user.uid : 'guest_user'
-      };
-
-      // Use keepalive: true to ensure the browser successfully dispatches this off-tab request
-      fetch(`${window.location.origin}/api/save-progress-webhook`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload),
-        keepalive: true
-      }).catch(err => {
-        // Silently handle the cancelled promise rejection during unloading 
-        // while keepalive makes sure the payload is shipped to the server
-      });
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        handleUnloadAndSave();
-      } else if (document.visibilityState === 'visible') {
-        unloadTriggered = false;
-      }
-    };
-
-    window.addEventListener('beforeunload', handleUnloadAndSave);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      window.removeEventListener('beforeunload', handleUnloadAndSave);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, []);
 
   const login = async () => {
     await loginWithGoogle();
