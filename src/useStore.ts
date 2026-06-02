@@ -788,6 +788,7 @@ export function useStore() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           playerName: state.profile.name,
+          playerBio: state.profile.bio,
           items,
           amount
         })

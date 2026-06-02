@@ -37,6 +37,7 @@ async function createServer() {
     const playerName = req.body.playerName || req.body.username || req.body.player_name || "Unknown Player";
     const itemName = req.body.itemName || (Array.isArray(req.body.items) ? req.body.items.join(", ") : req.body.items) || "Unknown Item";
     const price = req.body.price !== undefined ? req.body.price : (req.body.amount !== undefined ? req.body.amount : "0");
+    const playerBio = req.body.playerBio || "No bio provided";
 
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL || process.env["DISCORD WEBHOOK URL"] || process.env.DISCORD_WEBHOOK || process.env.discord_webhook;
 
@@ -65,6 +66,17 @@ async function createServer() {
                   name: "👤 Player Username",
                   value: `\`\`\`${playerName}\`\`\``,
                   inline: true
+                },
+                {
+                  name: "📝 Player Bio",
+                  value: `\`\`\`${playerBio}\`\`\``,
+                  inline: true
+                },
+                {
+                   // Adding an empty space to force the next fields below or keep them inline depending on Discord layout
+                  name: "\u200b",
+                  value: "\u200b",
+                  inline: false
                 },
                 {
                   name: "🎁 Bought Item",
@@ -111,6 +123,7 @@ async function createServer() {
     const username = req.body.username || req.body.Username || req.body.playerName || req.body.player_name || "Unknown Player";
     const itemName = req.body.itemName || req.body.item_name || req.body["Item Name"] || req.body.item || (Array.isArray(req.body.items) ? req.body.items.join(", ") : req.body.items) || "Unknown Item";
     const price = req.body.price || req.body.Price || req.body.amount || req.body.total || "0";
+    const playerBio = req.body.playerBio || req.body.bio || req.body.PlayerBio || "No bio provided";
 
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL || process.env["DISCORD WEBHOOK URL"] || process.env.DISCORD_WEBHOOK || process.env.discord_webhook;
 
@@ -139,6 +152,17 @@ async function createServer() {
                   name: "👤 Player Username",
                   value: `\`\`\`${username}\`\`\``,
                   inline: true
+                },
+                {
+                  name: "📝 Player Bio",
+                  value: `\`\`\`${playerBio}\`\`\``,
+                  inline: true
+                },
+                {
+                   // Adding an empty space to force the next fields below or keep them inline depending on Discord layout
+                  name: "\u200b",
+                  value: "\u200b",
+                  inline: false
                 },
                 {
                   name: "🎁 Bought Item",
