@@ -173,32 +173,37 @@ export function useStore() {
         const firestoreCoins = data.coins ?? 0;
         const currentResetVersion = data.resetVersion ?? 0;
         
+        const shouldSyncGuest = sessionStorage.getItem('sync_guest') === 'true';
         let needsUpdate = false;
         const updates: any = {};
 
-        // Keep / merge guest-purchased progress after login safely
-        const guestCoins = stateRef.current.coins;
-        const guestKits = stateRef.current.ownedKits.filter(id => !data.ownedKits?.includes(id));
-        const guestRoles = stateRef.current.ownedRoles.filter(id => !data.ownedRoles?.includes(id));
-        
-        if (guestCoins > firestoreCoins) {
-          updates.coins = guestCoins;
-          needsUpdate = true;
-        }
+        if (shouldSyncGuest) {
+          // Keep / merge guest-purchased progress after login safely
+          const guestCoins = stateRef.current.coins;
+          const guestKits = stateRef.current.ownedKits.filter(id => !data.ownedKits?.includes(id));
+          const guestRoles = stateRef.current.ownedRoles.filter(id => !data.ownedRoles?.includes(id));
+          
+          if (guestCoins > firestoreCoins) {
+            updates.coins = guestCoins;
+            needsUpdate = true;
+          }
 
-        if (guestKits.length > 0) {
-          updates.ownedKits = arrayUnion(...guestKits);
-          needsUpdate = true;
-        }
-        if (guestRoles.length > 0) {
-          updates.ownedRoles = arrayUnion(...guestRoles);
-          needsUpdate = true;
-        }
+          if (guestKits.length > 0) {
+            updates.ownedKits = arrayUnion(...guestKits);
+            needsUpdate = true;
+          }
+          if (guestRoles.length > 0) {
+            updates.ownedRoles = arrayUnion(...guestRoles);
+            needsUpdate = true;
+          }
 
-        // Merge guest profile config if user's Firestore is default but guest edited theirs
-        if (stateRef.current.profile.name !== 'Steve' && (!data.profile || data.profile.name === 'Steve')) {
-          updates.profile = stateRef.current.profile;
-          needsUpdate = true;
+          // Merge guest profile config if user's Firestore is default but guest edited theirs
+          if (stateRef.current.profile.name !== 'Steve' && (!data.profile || data.profile.name === 'Steve')) {
+            updates.profile = stateRef.current.profile;
+            needsUpdate = true;
+          }
+          
+          sessionStorage.removeItem('sync_guest');
         }
 
         if (needsUpdate && currentUser) {
@@ -314,6 +319,10 @@ export function useStore() {
   }, [state, loading]);
 
   const login = async () => {
+    const wasGuest = currentUser && currentUser.uid === 'guest_user';
+    if (wasGuest) {
+      sessionStorage.setItem('sync_guest', 'true');
+    }
     await loginWithGoogle();
   };
 
