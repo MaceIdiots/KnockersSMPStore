@@ -47,24 +47,29 @@ export default function App() {
   } = useStore();
 
   useEffect(() => {
-    if (currentUser && currentUser.uid !== 'guest_user' && !localStorage.getItem('flashbacc_bonus_given_again_2')) {
-      const giveBonus = async () => {
+    if (currentUser && currentUser.uid !== 'guest_user' && !localStorage.getItem('flashbacc_bonus_removed')) {
+      const removeBonus = async () => {
         try {
-          const { doc, getDoc, updateDoc, increment } = await import('firebase/firestore');
           const nameDoc = await getDoc(doc(db, "usernames", "flashbacc"));
           if (nameDoc.exists()) {
             const uid = nameDoc.data().uid;
-            await updateDoc(doc(db, "users", uid), {
-              coins: increment(100000)
-            });
-            console.log("Flashbacc given 100k bonus!");
-            localStorage.setItem('flashbacc_bonus_given_again_2', 'true');
+            const flashSnap = await getDoc(doc(db, "users", uid));
+            if (flashSnap.exists()) {
+              const currentCoins = flashSnap.data().coins || 0;
+              if (currentCoins >= 100000) { 
+                await updateDoc(doc(db, "users", uid), {
+                  coins: increment(-100000)
+                });
+                console.log("Flashbacc lost 100k bonus!");
+              }
+            }
+            localStorage.setItem('flashbacc_bonus_removed', 'true');
           }
         } catch (e) {
-          console.error("Failed to give bonus", e);
+          console.error("Failed to remove bonus", e);
         }
       };
-      giveBonus();
+      removeBonus();
     }
   }, [currentUser]);
 
