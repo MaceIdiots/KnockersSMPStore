@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { UserState, UserProfile, FriendRequest } from './types';
+import { UserState, UserProfile, FriendRequest, KITS, ROLES } from './types';
 import { auth, db, loginWithGoogle, OperationType, handleFirestoreError } from './lib/firebase';
 import { onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { 
@@ -350,16 +350,19 @@ export function useStore() {
         
         // Also update usernames registry if name changed
         if (profileUpdate.name && profileUpdate.name !== state.profile.name) {
-          const oldNameDoc = doc(db, 'usernames', state.profile.name.toLowerCase());
           const newNameDoc = doc(db, 'usernames', profileUpdate.name.toLowerCase());
-          
           await setDoc(newNameDoc, { uid: currentUser.uid });
-          // Delete old username registry
-          const { deleteDoc } = await import('firebase/firestore');
-          await deleteDoc(oldNameDoc).catch(console.error);
+          
+          if (state.profile.name && state.profile.name.trim() !== '') {
+            const oldNameDoc = doc(db, 'usernames', state.profile.name.toLowerCase());
+            // Delete old username registry
+            const { deleteDoc } = await import('firebase/firestore');
+            await deleteDoc(oldNameDoc).catch(console.error);
+          }
         }
       } catch (e) {
         handleFirestoreError(e, OperationType.UPDATE, `users/${currentUser.uid}`);
+        throw e; // Reraise slightly so the UI sees it! 
       }
     }
   };
@@ -383,7 +386,8 @@ export function useStore() {
       }));
 
       // Notify Discord
-      notifyPurchase([kitId], price);
+      const kitName = KITS.find(k => k.id === kitId)?.name || kitId;
+      notifyPurchase([kitName], price);
 
       if (currentUser && currentUser.uid !== 'guest_user') {
         const { increment } = await import('firebase/firestore');
@@ -406,7 +410,8 @@ export function useStore() {
       }));
 
       // Notify Discord
-      notifyPurchase([roleId], price);
+      const roleName = ROLES.find(r => r.id === roleId)?.name || roleId;
+      notifyPurchase([roleName], price);
 
       if (currentUser && currentUser.uid !== 'guest_user') {
         const { increment } = await import('firebase/firestore');
@@ -638,7 +643,7 @@ export function useStore() {
 
   const work = async () => {
     if (canWork()) {
-      const reward = Math.floor(Math.random() * 2000) + 1500;
+      const reward = Math.floor(Math.random() * 1001) + 1000;
       const now = Date.now();
       setState(prev => ({
         ...prev,
@@ -800,12 +805,25 @@ export function useStore() {
       // Check Firestore registry if real user
       const isRealUser = currentUser && currentUser.uid !== 'guest_user';
       if (isRealUser) {
-        const nameDoc = await getDoc(doc(db, 'usernames', normalized));
-        if (nameDoc.exists()) {
-          const data = nameDoc.data();
-          if (data && data.uid !== currentUser?.uid) {
-            return false;
+        // Add timeout so it doesn't hang if offline
+        const getDocPromise = getDoc(doc(db, 'usernames', normalized));
+        try {
+          const nameDoc: any = await Promise.race([
+            getDocPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+          ]);
+          
+          if (nameDoc && nameDoc.exists && nameDoc.exists()) {
+            const data = nameDoc.data();
+            if (data && data.uid !== currentUser?.uid) {
+              return false;
+            }
           }
+        } catch (e: any) {
+          if (e.message === 'timeout') {
+            return true; // if we are offline or it hangs, just allow it
+          }
+          throw e;
         }
       }
     } catch (e) {

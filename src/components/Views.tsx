@@ -320,6 +320,7 @@ export function ShopView({ coins, onBuy, onBuyRole, onSellKit, onSellRole, owned
 
 export function WorkView({ onWork, canWork, getTimeRemaining, onClaimDailyReward, getDailyRewardTimeRemaining }: Pick<ViewProps, 'onWork' | 'canWork' | 'getTimeRemaining' | 'onClaimDailyReward' | 'getDailyRewardTimeRemaining'>) {
   const [mining, setMining] = useState(false);
+  const [miningProgress, setMiningProgress] = useState(0);
   const [claiming, setClaiming] = useState(false);
   const [reward, setReward] = useState<number | null>(null);
   const [dailyRewardMsg, setDailyRewardMsg] = useState<number | null>(null);
@@ -367,21 +368,41 @@ export function WorkView({ onWork, canWork, getTimeRemaining, onClaimDailyReward
     if (!canWork() || mining) return;
     setMining(true);
     setReward(null);
-    try {
-      const earned = await onWork();
-      setReward(earned);
-    } catch (e) {
-      console.error('Work failed', e);
-    } finally {
-      setMining(false);
-    }
+    setMiningProgress(0);
+
+    // Simulate mining progress
+    const duration = 2000;
+    const intervalTime = 50;
+    const steps = duration / intervalTime;
+    let currentStep = 0;
+
+    const progressInterval = setInterval(() => {
+      currentStep++;
+      setMiningProgress((currentStep / steps) * 100);
+      if (currentStep >= steps) {
+        clearInterval(progressInterval);
+      }
+    }, intervalTime);
+
+    // Real work execution runs concurrently or awaits after delay:
+    setTimeout(async () => {
+      try {
+        const earned = await onWork();
+        setReward(earned);
+      } catch (e) {
+        console.error('Work failed', e);
+      } finally {
+        setMining(false);
+        setMiningProgress(0);
+      }
+    }, duration);
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-12 pb-32 px-4">
       <div className="text-center space-y-4">
         <h2 className="text-4xl font-bold tracking-tight">THE <span className="text-smp-gold underline underline-offset-8 italic">GRIND</span></h2>
-        <p className="text-gray-400">Wealth isn't given, it's earned. Every shift counts towards your next rank in the server.</p>
+        <p className="text-gray-400">Wealth isn't given, it's earned (1,000 - 2,000 coins per shift). Every shift counts towards your next rank in the server.</p>
       </div>
 
       <div className="bg-smp-card border-2 border-smp-border p-8 md:p-16 pixel-corners text-center relative overflow-hidden group">
@@ -390,14 +411,24 @@ export function WorkView({ onWork, canWork, getTimeRemaining, onClaimDailyReward
         </div>
 
         <div className="flex flex-col items-center justify-center gap-10">
-          <div className="relative">
+          <div className="relative flex flex-col items-center">
              <motion.div 
-               animate={mining ? { rotate: [0, -30, 20, -30, 0], scale: [1, 1.1, 1] } : {}}
-               transition={{ duration: 0.4, repeat: Infinity }}
-               className="relative z-10"
+               animate={mining ? { scale: [1, 1.05, 1] } : { scale: 1 }}
+               transition={{ duration: 1, repeat: Infinity, ease: "easeInOut" }}
+               className="relative z-10 inline-block"
              >
-                <Pickaxe size={140} className={mining ? 'text-smp-red glow-red' : 'text-gray-700'} strokeWidth={1} />
+                <Pickaxe size={140} className={mining ? 'text-gray-400 drop-shadow-[0_0_20px_rgba(156,163,175,0.7)]' : (!canWork() ? 'text-gray-800' : 'text-gray-600')} strokeWidth={1} />
              </motion.div>
+             
+             {mining && (
+               <div className="absolute -bottom-8 w-48 h-3 bg-black/50 border border-white/10 pixel-corners overflow-hidden">
+                 <div 
+                   className="h-full bg-gray-400 transition-all duration-75 ease-linear"
+                   style={{ width: `${miningProgress}%` }}
+                 />
+               </div>
+             )}
+
              <AnimatePresence>
                {reward && (
                  <motion.div 
@@ -483,7 +514,7 @@ export function WorkView({ onWork, canWork, getTimeRemaining, onClaimDailyReward
         </motion.div>
 
         {[
-          { icon: Hammer, color: 'text-red-400', bg: 'bg-red-400/10', label: 'Shift Reward', value: '1.5k - 3.5k Coins' },
+          { icon: Hammer, color: 'text-red-400', bg: 'bg-red-400/10', label: 'Shift Reward', value: '1,000 - 2,000 Coins' },
           { icon: Clock, color: 'text-blue-400', bg: 'bg-blue-400/10', label: 'Shift Duration', value: '1 Minute Shift' },
           { icon: Pickaxe, color: 'text-yellow-400', bg: 'bg-yellow-400/10', label: 'Requirement', value: 'Manual Labor' },
         ].map((item, i) => (
@@ -784,12 +815,27 @@ export function ProfileView({
         return;
       }
 
-      await onUpdateProfile(formData);
+      // Start the update
+      const updatePromise = onUpdateProfile(formData);
+      
+      // Wait for it to either succeed or wait a max of 2 seconds so the UI doesn't hang
+      await Promise.race([
+        updatePromise,
+        new Promise(resolve => setTimeout(resolve, 2000))
+      ]);
+      
       setStatus('success');
       setTimeout(() => setStatus('idle'), 3000);
     } catch (e: any) {
       console.error("Profile save error: ", e);
-      setErrorMessage(e?.message || "An error occurred while saving profile changes. Check internet or username rules.");
+      let errMsg = "An error occurred while saving profile changes. Check internet or username rules.";
+      try {
+        const parsed = JSON.parse(e.message);
+        if (parsed.error) errMsg = parsed.error;
+      } catch (parseError) {
+        if (e?.message) errMsg = e.message;
+      }
+      setErrorMessage(errMsg);
       setStatus('error');
     } finally {
       setIsSaving(false);

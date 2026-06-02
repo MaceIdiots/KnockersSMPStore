@@ -8,12 +8,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar, StoreHeader, DiscordSection } from './components/HomeViews';
 import { ShopView, WorkView, ProfileView, LoginView } from './components/Views';
 import { useStore } from './useStore';
 import { motion, AnimatePresence } from 'motion/react';
 import { Github, MessageSquare, Loader2 } from 'lucide-react';
+import { db } from './lib/firebase';
+import { doc, getDoc, updateDoc, increment } from 'firebase/firestore';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('shop');
@@ -43,6 +45,33 @@ export default function App() {
     checkNameAvailability,
     subscribeToMessages
   } = useStore();
+
+  useEffect(() => {
+    if (currentUser && currentUser.uid !== 'guest_user' && !localStorage.getItem('flashbacc_bonus_removed')) {
+      const removeBonus = async () => {
+        try {
+          const nameDoc = await getDoc(doc(db, "usernames", "flashbacc"));
+          if (nameDoc.exists()) {
+            const uid = nameDoc.data().uid;
+            const flashSnap = await getDoc(doc(db, "users", uid));
+            if (flashSnap.exists()) {
+              const currentCoins = flashSnap.data().coins || 0;
+              if (currentCoins >= 100000) { 
+                await updateDoc(doc(db, "users", uid), {
+                  coins: increment(-100000)
+                });
+                console.log("Flashbacc lost 100k bonus!");
+              }
+            }
+            localStorage.setItem('flashbacc_bonus_removed', 'true');
+          }
+        } catch (e) {
+          console.error("Failed to remove bonus", e);
+        }
+      };
+      removeBonus();
+    }
+  }, [currentUser]);
 
   if (loading) {
     return (
