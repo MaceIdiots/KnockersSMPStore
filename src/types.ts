@@ -60,6 +60,7 @@ export interface UserState {
   lastWorked: number | null;
   lastDailyReward: number | null;
   resetVersion: number;
+  redeemedVouchers: string[];
 }
 
 export const KITS: Kit[] = [

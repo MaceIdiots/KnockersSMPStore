@@ -200,6 +200,18 @@ async function createServer() {
   app.post("/api/vercel-webhook", handleCheckoutWebhook);
   app.post("/api/checkout-webhook", handleCheckoutWebhook);
   app.post("/api/store-webhook", handleCheckoutWebhook);
+  
+  app.post("/api/redeem-voucher", express.json(), (req, res) => {
+    const code = req.body.code as string;
+    
+    // The secret code is only visible server-side
+    // This entirely prevents client-side stealing via devtools
+    if (code === "1324359") {
+      return res.json({ success: true, reward: 50000 });
+    }
+    
+    return res.json({ success: false, message: "Invalid voucher code." });
+  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
