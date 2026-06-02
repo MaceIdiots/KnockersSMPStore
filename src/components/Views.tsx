@@ -515,8 +515,7 @@ export function WorkView({ onWork, canWork, getTimeRemaining, onClaimDailyReward
 
         {[
           { icon: Hammer, color: 'text-red-400', bg: 'bg-red-400/10', label: 'Shift Reward', value: '1,000 - 2,000 Coins' },
-          { icon: Clock, color: 'text-blue-400', bg: 'bg-blue-400/10', label: 'Shift Duration', value: '1 Minute Shift' },
-          { icon: Pickaxe, color: 'text-yellow-400', bg: 'bg-yellow-400/10', label: 'Requirement', value: 'Manual Labor' },
+          { icon: Clock, color: 'text-blue-400', bg: 'bg-blue-400/10', label: 'Shift Duration', value: '1 Minute Shift' }
         ].map((item, i) => (
           <motion.div 
             key={i}

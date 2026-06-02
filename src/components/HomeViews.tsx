@@ -4,7 +4,7 @@
  */
 
 import { motion } from 'motion/react';
-import { Coins, Users, ShoppingBag, Pickaxe, Home, ExternalLink, User, MessageCircle, LogOut } from 'lucide-react';
+import { Coins, Users, ShoppingBag, Pickaxe, Home, ExternalLink, User, MessageCircle, LogOut, Sun, Moon } from 'lucide-react';
 import { User as FirebaseUser } from 'firebase/auth';
 
 interface NavbarProps {
@@ -60,6 +60,7 @@ export function Navbar({ activeTab, setActiveTab, coins, onLogout, user }: Navba
                 {coins.toLocaleString()}
               </span>
             </div>
+
             <a 
               href="https://discord.gg/drt4CmFJF" 
               target="_blank" 
