@@ -2,8 +2,39 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import fs from "fs";
+import * as admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
+
+try {
+  const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (serviceAccountStr) {
+    admin.initializeApp({
+      credential: admin.credential.cert(JSON.parse(serviceAccountStr))
+    });
+  } else {
+    admin.initializeApp();
+  }
+} catch (e) {
+  console.error("Firebase admin init error", e);
+}
+
+const db = getFirestore();
+
+// Function to update coins
+async function updateCoins(uid: string, newBalance: number) {
+  await db.collection("users").doc(uid).set({
+    coins: newBalance
+  }, { merge: true });
+}
+
+// Function to get coins on login
+async function getCoins(uid: string) {
+  const doc = await db.collection("users").doc(uid).get();
+  return doc.exists ? doc.data()?.coins : 0;
+}
 
 const BACKUPS_FILE = path.join(process.cwd(), "backups.json");
+
 
 function getBackups() {
   if (fs.existsSync(BACKUPS_FILE)) {
@@ -119,6 +150,43 @@ async function createServer() {
           }]
         })
       });
+
+      // Update coins in Firebase
+      try {
+        const usernameLower = username.toLowerCase();
+        const nameDoc = await db.collection("usernames").doc(usernameLower).get();
+        if (nameDoc.exists) {
+          const uid = nameDoc.data()?.uid;
+          if (uid) {
+            // Attempt to parse coin amount from itemName (e.g., "50,000 Coins" or "50k Coins")
+            const itemNameStr = String(itemName);
+            let addCoins = 0;
+            const match = itemNameStr.match(/(?:^|\s)([\d,]+)(?:[kK])?(?:\s*Coins?)(?:$|\s)/i) || itemNameStr.match(/([\d,]+)\s*Coins/i);
+            if (match) {
+              addCoins = parseInt(match[1].replace(/,/g, ''), 10);
+              if (itemNameStr.match(/[kK]\s*Coins?/i)) {
+                addCoins *= 1000;
+              }
+            } else {
+              // Fallback to parsing the price
+              const priceNum = parseInt(String(price).replace(/,/g, ''), 10);
+              if (!isNaN(priceNum) && priceNum > 0) {
+                addCoins = priceNum;
+              }
+            }
+
+            if (addCoins > 0) {
+              const currentCoins = await getCoins(uid);
+              const newBalance = (currentCoins || 0) + addCoins;
+              await updateCoins(uid, newBalance);
+              console.log(`Added ${addCoins} coins to ${username} (UID: ${uid}). New balance: ${newBalance}`);
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.error("Failed to update coins in Firestore:", dbErr);
+      }
+
       res.json({ status: "ok", message: "Discord webhook notification dispatched successfully!" });
     } catch (err: any) {
       console.error("Discord Notification failed:", err);
