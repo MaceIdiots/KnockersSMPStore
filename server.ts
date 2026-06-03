@@ -4,6 +4,7 @@ import { createServer as createViteServer } from "vite";
 import fs from "fs";
 import * as admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
+import rateLimit from "express-rate-limit";
 
 try {
   const serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -33,8 +34,19 @@ async function getCoins(uid: string) {
   return doc.exists ? doc.data()?.coins : 0;
 }
 
-const BACKUPS_FILE = path.join(process.cwd(), "backups.json");
+// Ensure audit log function
+async function logAudit(transaction: any) {
+  try {
+    await db.collection("audit_logs").add({
+      ...transaction,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (e) {
+    console.error("Failed to write audit log:", e);
+  }
+}
 
+const BACKUPS_FILE = path.join(process.cwd(), "backups.json");
 
 function getBackups() {
   if (fs.existsSync(BACKUPS_FILE)) {
@@ -57,13 +69,123 @@ function saveBackups(backups: any) {
 
 async function createServer() {
   const app = express();
+  
+  // Apply general rate limiting to prevent API abuse
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, 
+    max: 200, 
+    message: { status: "error", message: "Too many requests, please try again later." }
+  });
+  
+  const purchaseLimiter = rateLimit({
+    windowMs: 60 * 1000, 
+    max: 10, 
+    message: { status: "error", message: "Purchase rate limit exceeded. Slow down." }
+  });
+
   app.use(express.json());
+  app.use("/api/", apiLimiter);
 
   // API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
-  app.post("/api/notify-purchase", async (req, res) => {
+
+  // Verify auth middleware
+  const authenticate = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+    const token = authHeader.split("Bearer ")[1];
+    try {
+      const decoded = await admin.auth().verifyIdToken(token);
+      (req as any).user = decoded;
+      next();
+    } catch (e) {
+      console.error("Auth verification failed:", e);
+      return res.status(401).json({ success: false, message: "Unauthorized token" });
+    }
+  };
+
+  // Backend verification for item purchases
+  app.post("/api/buy-item", purchaseLimiter, authenticate, async (req, res) => {
+    const uid = (req as any).user.uid;
+    const { itemId, itemType } = req.body;
+    
+    if (!itemId || !itemType) {
+      return res.status(400).json({ success: false, message: "Invalid request payload" });
+    }
+
+    try {
+      // Dynamic import to use shared KITS/ROLES logic
+      const { KITS, ROLES } = await import("./src/types.ts");
+      const itemList = itemType === "kit" ? KITS : ROLES;
+      const item = (itemList as any[]).find((i: any) => i.id === itemId);
+      
+      if (!item) {
+         throw new Error("Item not found");
+      }
+      
+      const price = item.price;
+
+      const userRef = db.collection("users").doc(uid);
+      
+      const result = await db.runTransaction(async (t) => {
+        const doc = await t.get(userRef);
+        if (!doc.exists) {
+          throw new Error("User record not found");
+        }
+        
+        const data = doc.data();
+        const currentCoins = data?.coins || 0;
+        
+        if (currentCoins < price) {
+          throw new Error("Insufficient coins for this purchase");
+        }
+        
+        const fieldName = itemType === "kit" ? "ownedKits" : "ownedRoles";
+        const currentOwned = data?.[fieldName] || [];
+        
+        if (currentOwned.includes(itemId)) {
+          throw new Error("You already own this item");
+        }
+        
+        t.update(userRef, {
+          coins: currentCoins - price,
+          [fieldName]: admin.firestore.FieldValue.arrayUnion(itemId)
+        });
+        
+        return currentCoins - price;
+      });
+      
+      // Write audit log
+      await logAudit({
+        type: "purchase",
+        uid,
+        itemId,
+        itemType,
+        price,
+        status: "success"
+      });
+      
+      return res.json({ success: true, newBalance: result, price });
+    } catch (e: any) {
+      console.error("Purchase failed:", e);
+      // log failure
+      await logAudit({
+        type: "purchase",
+        uid,
+        itemId,
+        itemType,
+        status: "failed",
+        reason: e.message
+      });
+      return res.status(400).json({ success: false, message: e.message || "Purchase failed" });
+    }
+  });
+
+  app.post("/api/notify-purchase", purchaseLimiter, async (req, res) => {
     // Extract playerName, itemName, and price from req.body, with fallbacks for alternative formats
     const username = req.body.playerName || req.body.username || req.body.player_name || "Unknown Player";
     const itemName = req.body.itemName || (Array.isArray(req.body.items) ? req.body.items.join(", ") : req.body.items) || "Unknown Item";

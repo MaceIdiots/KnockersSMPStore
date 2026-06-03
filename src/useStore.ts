@@ -21,6 +21,7 @@ import {
   arrayRemove,
   addDoc
 } from 'firebase/firestore';
+import { useToast } from './components/Toast';
 
 const STORAGE_KEY = 'knockers_smp_user_state';
 
@@ -49,6 +50,7 @@ const INITIAL_TAKEN_NAMES = new Set(['Knockbacc', 'Kuro', 'Aaravos', 'Dylan', 'W
 export function useStore() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const { showToast, showError } = useToast();
   const [state, setState] = useState<UserState>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -388,6 +390,7 @@ export function useStore() {
 
   const buyKit = async (kitId: string, price: number) => {
     if (state.coins >= price && !state.ownedKits.includes(kitId)) {
+      // Optimistic update
       setState(prev => ({
         ...prev,
         coins: prev.coins - price,
@@ -399,11 +402,31 @@ export function useStore() {
       notifyPurchase([kitName], price);
 
       if (currentUser && currentUser.uid !== 'guest_user') {
-        const { increment } = await import('firebase/firestore');
-        await updateDoc(doc(db, 'users', currentUser.uid), { 
-          coins: increment(-price),
-          ownedKits: arrayUnion(kitId)
-        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+        try {
+          const token = await currentUser.getIdToken();
+          const response = await fetch('/api/buy-item', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ itemId: kitId, itemType: 'kit' })
+          });
+          const data = await response.json();
+          if (!data.success) {
+            throw new Error(data.message || 'Purchase failed');
+          }
+          showToast(`Successfully purchased ${kitName}!`, 'success');
+        } catch (e: any) {
+          showError(e);
+          // Revert optimistic update
+          setState(prev => ({
+            ...prev,
+            coins: prev.coins + price,
+            ownedKits: prev.ownedKits.filter(id => id !== kitId),
+          }));
+          return false;
+        }
       }
       return true;
     }
@@ -412,6 +435,7 @@ export function useStore() {
 
   const buyRole = async (roleId: string, price: number) => {
     if (state.coins >= price && !state.ownedRoles.includes(roleId)) {
+      // Optimistic update
       setState(prev => ({
         ...prev,
         coins: prev.coins - price,
@@ -423,11 +447,31 @@ export function useStore() {
       notifyPurchase([roleName], price);
 
       if (currentUser && currentUser.uid !== 'guest_user') {
-        const { increment } = await import('firebase/firestore');
-        await updateDoc(doc(db, 'users', currentUser.uid), { 
-          coins: increment(-price),
-          ownedRoles: arrayUnion(roleId)
-        }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
+        try {
+          const token = await currentUser.getIdToken();
+          const response = await fetch('/api/buy-item', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ itemId: roleId, itemType: 'role' })
+          });
+          const data = await response.json();
+          if (!data.success) {
+            throw new Error(data.message || 'Purchase failed');
+          }
+          showToast(`Successfully bought ${roleName}!`, 'success');
+        } catch (e: any) {
+          showError(e);
+          // Revert optimistic update
+          setState(prev => ({
+            ...prev,
+            coins: prev.coins + price,
+            ownedRoles: prev.ownedRoles.filter(id => id !== roleId),
+          }));
+          return false;
+        }
       }
       return true;
     }
