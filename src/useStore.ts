@@ -41,7 +41,6 @@ const DEFAULT_STATE: UserState = {
   lastWorked: null,
   lastDailyReward: null,
   resetVersion: 3, // Current version
-  redeemedVouchers: [],
 };
 
 // Initial list of "canonical" names in the SMP to simulate "taken" names
@@ -221,7 +220,6 @@ export function useStore() {
           lastWorked: data.lastWorked || prev.lastWorked,
           lastDailyReward: data.lastDailyReward || prev.lastDailyReward,
           resetVersion: currentResetVersion,
-          redeemedVouchers: data.redeemedVouchers || prev.redeemedVouchers || [],
           friends: data.friends || prev.friends,
           sentRequests: data.sentRequests || prev.sentRequests,
         }));
@@ -236,7 +234,6 @@ export function useStore() {
           lastWorked: stateRef.current.lastWorked || null,
           lastDailyReward: stateRef.current.lastDailyReward || null,
           resetVersion: 3,
-          redeemedVouchers: stateRef.current.redeemedVouchers || [],
           createdAt: serverTimestamp(),
           friends: [],
           sentRequests: []
@@ -386,43 +383,6 @@ export function useStore() {
       await updateDoc(doc(db, 'users', currentUser.uid), { 
         coins: increment(amount) 
       }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
-    }
-  };
-
-  const redeemVoucher = async (code: string) => {
-    if (state.redeemedVouchers.includes(code)) {
-      return { success: false, message: 'Voucher already redeemed.' };
-    }
-
-    try {
-      const response = await fetch('/api/redeem-voucher', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
-      });
-      const data = await response.json();
-
-      if (data.success) {
-        const reward = data.reward;
-        setState(prev => ({
-          ...prev,
-          coins: prev.coins + reward,
-          redeemedVouchers: [...prev.redeemedVouchers, code]
-        }));
-
-        if (currentUser && currentUser.uid !== 'guest_user') {
-          const { increment, arrayUnion } = await import('firebase/firestore');
-          await updateDoc(doc(db, 'users', currentUser.uid), {
-            coins: increment(reward),
-            redeemedVouchers: arrayUnion(code)
-          }).catch(e => handleFirestoreError(e, OperationType.UPDATE, 'users'));
-        }
-        return { success: true, message: `Voucher redeemed! Added ${reward.toLocaleString()} coins.` };
-      }
-
-      return { success: false, message: data.message || 'Invalid voucher code.' };
-    } catch (e) {
-      return { success: false, message: 'An error occurred while validating the voucher.' };
     }
   };
 
@@ -899,7 +859,6 @@ export function useStore() {
     logout,
     updateProfile,
     addCoins,
-    redeemVoucher,
     buyKit,
     buyRole,
     sendFriendRequest,

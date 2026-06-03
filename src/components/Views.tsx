@@ -787,16 +787,11 @@ export function ProfileView({
   coins: number;
   ownedKits: string[];
   ownedRoles: string[];
-  onRedeemVoucher?: (code: string) => Promise<{ success: boolean; message: string }>;
 }) {
   const [formData, setFormData] = useState(profile);
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [voucherCode, setVoucherCode] = useState('');
-  const [isRedeeming, setIsRedeeming] = useState(false);
-  const [voucherStatus, setVoucherStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [voucherMessage, setVoucherMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Sync state if profile changes in storage (e.g. from check-backup or multiple tabs)
@@ -844,32 +839,6 @@ export function ProfileView({
       setStatus('error');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleRedeemVoucher = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!voucherCode.trim() || !onRedeemVoucher) return;
-
-    setIsRedeeming(true);
-    setVoucherStatus('idle');
-    setVoucherMessage(null);
-
-    try {
-      const res = await onRedeemVoucher(voucherCode.trim());
-      if (res.success) {
-        setVoucherStatus('success');
-        setVoucherMessage(res.message);
-        setVoucherCode('');
-      } else {
-        setVoucherStatus('error');
-        setVoucherMessage(res.message);
-      }
-    } catch (err: any) {
-      setVoucherStatus('error');
-      setVoucherMessage('An error occurred. Please try again.');
-    } finally {
-      setIsRedeeming(false);
     }
   };
 
@@ -1149,40 +1118,6 @@ export function ProfileView({
             </button>
           </div>
         </form>
-      </motion.div>
-
-      {/* Voucher Code Section */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="mt-8 bg-smp-card border-2 border-smp-border pixel-corners overflow-hidden p-8"
-      >
-        <div className="space-y-4 max-w-xl">
-          <h2 className="text-2xl font-bold uppercase italic tracking-tighter text-white">REDEEM VOUCHER</h2>
-          <p className="text-gray-400 text-sm leading-relaxed">Have a secret voucher code? Enter it below to receive exclusive rewards or coins.</p>
-          <form onSubmit={handleRedeemVoucher} className="flex flex-col sm:flex-row gap-4 mt-6">
-            <input 
-              type="text" 
-              value={voucherCode}
-              onChange={e => setVoucherCode(e.target.value)}
-              placeholder="Enter Voucher Code..."
-              className="flex-1 bg-smp-bg border-2 border-smp-border px-5 py-3 pixel-corners focus:border-smp-red outline-none transition-all placeholder:text-gray-600 font-mono tracking-widest text-center sm:text-left text-white"
-            />
-            <button 
-              type="submit" 
-              disabled={isRedeeming || !voucherCode.trim()}
-              className="bg-smp-red hover:bg-red-500 text-white font-bold px-8 py-3 pixel-corners shadow-[0_6px_0_0_#991b1b] active:shadow-none active:translate-y-1.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-            >
-              {isRedeeming ? 'REDEEMING...' : 'REDEEM'}
-            </button>
-          </form>
-          {voucherMessage && (
-            <p className={`text-sm font-bold mt-4 uppercase ${voucherStatus === 'success' ? 'text-green-500' : 'text-red-500'}`}>
-              {voucherMessage}
-            </p>
-          )}
-        </div>
       </motion.div>
 
       <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -34,7 +34,7 @@ async function createServer() {
   });
   app.post("/api/notify-purchase", async (req, res) => {
     // Extract playerName, itemName, and price from req.body, with fallbacks for alternative formats
-    const playerName = req.body.playerName || req.body.username || req.body.player_name || "Unknown Player";
+    const username = req.body.playerName || req.body.username || req.body.player_name || "Unknown Player";
     const itemName = req.body.itemName || (Array.isArray(req.body.items) ? req.body.items.join(", ") : req.body.items) || "Unknown Item";
     const price = req.body.price !== undefined ? req.body.price : (req.body.amount !== undefined ? req.body.amount : "0");
     const playerBio = req.body.playerBio || "No bio provided";
@@ -50,69 +50,32 @@ async function createServer() {
     }
 
     try {
-      const response = await fetch(webhookUrl, {
+      await fetch(webhookUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          embeds: [
-            {
-              title: "💰 Successful Store Purchase!",
-              description: "A new transaction was processed successfully in the web store.",
-              color: 0xDC2626, // Solid red border color to match the site's theme
-              fields: [
-                {
-                  name: "👤 Player Username",
-                  value: `\`\`\`${playerName}\`\`\``,
-                  inline: true
-                },
-                {
-                  name: "📝 Player Bio",
-                  value: `\`\`\`${playerBio}\`\`\``,
-                  inline: true
-                },
-                {
-                   // Adding an empty space to force the next fields below or keep them inline depending on Discord layout
-                  name: "\u200b",
-                  value: "\u200b",
-                  inline: false
-                },
-                {
-                  name: "🎁 Bought Item",
-                  value: `\`\`\`${itemName}\`\`\``,
-                  inline: true
-                },
-                {
-                  name: "🪙 Total Price",
-                  value: `\`\`\`${price} Coins\`\`\``,
-                  inline: true
-                }
-              ],
-              timestamp: new Date().toISOString(),
-              footer: {
-                text: "Knockers SMP Official Web Store",
-              },
-            },
-          ],
-        }),
+          embeds: [{
+            title: "⚡ Successful Checkout",
+            description: "A secure purchase completed successfully.",
+            color: 16711680, // Red
+            fields: [
+              { name: "👤 Player Username", value: `\`\`\`${username}\`\`\``, inline: true },
+              { name: "📝 Player Bio", value: `\`\`\`${playerBio}\`\`\``, inline: true },
+              { name: "\u200b", value: "\u200b", inline: false },
+              { name: "📦 Bought Item", value: `\`\`\`${itemName}\`\`\``, inline: true },
+              { name: "💰 Price", value: `\`\`\`${price} Coins\`\`\``, inline: true }
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: "Knockers SMP Store" }
+          }]
+        })
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Discord Webhook API returned non-OK status:", response.status, errorText);
-        return res.status(500).json({ 
-          status: "error", 
-          message: `Discord endpoint returned non-OK status (${response.status}).` 
-        });
-      }
-
       return res.json({ status: "ok", message: "Discord webhook notification dispatched successfully!" });
-    } catch (error: any) {
-      console.error("Webhook processing error in buy notify route:", error);
+    } catch (err: any) {
+      console.error("Discord Notification failed:", err);
       return res.status(500).json({ 
         status: "error", 
-        message: `Internal server error during Discord Webhook dispatch: ${error.message || error}` 
+        message: `Internal server error during Discord Webhook dispatch: ${err.message || err}` 
       });
     }
   });
@@ -136,82 +99,36 @@ async function createServer() {
     }
 
     try {
-      const response = await fetch(webhookUrl, {
+      await fetch(webhookUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          embeds: [
-            {
-              title: "⚡ Successful Checkout!",
-              description: "A secure Vercel store purchase event was processed.",
-              color: 0xDC2626, // Solid red border color (#DC2626) to match the site's theme
-              fields: [
-                {
-                  name: "👤 Player Username",
-                  value: `\`\`\`${username}\`\`\``,
-                  inline: true
-                },
-                {
-                  name: "📝 Player Bio",
-                  value: `\`\`\`${playerBio}\`\`\``,
-                  inline: true
-                },
-                {
-                   // Adding an empty space to force the next fields below or keep them inline depending on Discord layout
-                  name: "\u200b",
-                  value: "\u200b",
-                  inline: false
-                },
-                {
-                  name: "🎁 Bought Item",
-                  value: `\`\`\`${itemName}\`\`\``,
-                  inline: true
-                },
-                {
-                  name: "💰 Price",
-                  value: `\`\`\`${price}\`\`\``,
-                  inline: true
-                }
-              ],
-              timestamp: new Date().toISOString(),
-              footer: {
-                text: "Knockers SMP - Dynamic Vercel Checkout",
-              },
-            },
-          ],
-        }),
+          embeds: [{
+            title: "⚡ Successful Checkout",
+            description: "A secure purchase completed successfully.",
+            color: 16711680, // Red
+            fields: [
+              { name: "👤 Player Username", value: `\`\`\`${username}\`\`\``, inline: true },
+              { name: "📝 Player Bio", value: `\`\`\`${playerBio}\`\`\``, inline: true },
+              { name: "\u200b", value: "\u200b", inline: false },
+              { name: "📦 Bought Item", value: `\`\`\`${itemName}\`\`\``, inline: true },
+              { name: "💰 Price", value: `\`\`\`${price} Coins\`\`\``, inline: true }
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: "Knockers SMP Store" }
+          }]
+        })
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("Discord Webhook API error details:", errorText);
-        return res.status(500).json({ status: "error", message: "Failed to dispatch notification to Discord webhook" });
-      }
-
       res.json({ status: "ok", message: "Discord webhook notification dispatched successfully!" });
-    } catch (error) {
-      console.error("Webhook processing error:", error);
-      res.status(500).json({ status: "error", message: "Internal server error during Discord Webhook dispatch" });
+    } catch (err: any) {
+      console.error("Discord Notification failed:", err);
+      res.status(500).json({ status: "error", message: `Internal server error during Discord Webhook dispatch: ${err.message || err}` });
     }
   };
 
   app.post("/api/vercel-webhook", handleCheckoutWebhook);
   app.post("/api/checkout-webhook", handleCheckoutWebhook);
   app.post("/api/store-webhook", handleCheckoutWebhook);
-  
-  app.post("/api/redeem-voucher", express.json(), (req, res) => {
-    const code = req.body.code as string;
-    
-    // The secret code is only visible server-side
-    // This entirely prevents client-side stealing via devtools
-    if (code === "1324359") {
-      return res.json({ success: true, reward: 50000 });
-    }
-    
-    return res.json({ success: false, message: "Invalid voucher code." });
-  });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

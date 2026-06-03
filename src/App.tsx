@@ -37,7 +37,6 @@ export default function App() {
     claimDailyReward,
     getDailyRewardTimeRemaining,
     updateProfile,
-    redeemVoucher,
     sendFriendRequest,
     acceptFriendRequest,
     declineFriendRequest,
@@ -144,7 +143,6 @@ export default function App() {
                 coins={state.coins}
                 ownedKits={state.ownedKits}
                 ownedRoles={state.ownedRoles}
-                onRedeemVoucher={redeemVoucher}
               />
             )}
           </motion.div>
